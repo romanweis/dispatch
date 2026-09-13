@@ -1,0 +1,16 @@
+# repos.yaml - the repos this orchestrator may touch, and the role template each one uses.
+#
+# Dispatch's build-project-base.sh writes the real repos.yaml from project.yaml. Roles map to
+# role-templates/<role>-task.md. feature-decomposer reads this file to assign roles; the
+# scripts read it to validate slices.
+repos:
+  - name: backend
+    role: backend
+  - name: web
+    role: frontend-relay
+  - name: site
+    role: astro
+  - name: worker
+    role: python
+  - name: infra
+    role: infra

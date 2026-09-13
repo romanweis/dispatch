@@ -32,6 +32,10 @@ orchestrator:
   repo: orchestrator           # <workspace>/orchestrator, created from workflow-pack if missing on GitHub
   deployWorkflow: deploy.yml   # name of the deploy workflow guarded by merge-fleet.sh
   requiredChecks: []           # extra check names merge-fleet must see green
+  probeHosts: {}               # repo -> public host for the post-deploy liveness probe, e.g. backend: api.example.com
+  schemaFile: ""               # optional, path inside the backend repo of the committed GraphQL schema
+  migrationsDir: ""            # optional, enables the migration-number race guard
+  extraMainWorkflows: []       # optional, workflows on main that must be idle before merging
 claude:
   permissionMode: bypassPermissions   # containers are disposable
   allowedTools: []                    # empty = default

@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-surface-3: var(--c-surface-3);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-fg: var(--c-fg);
+  --color-fg-muted: var(--c-fg-muted);
+  --color-fg-faint: var(--c-fg-faint);
+  --color-accent: var(--c-accent);
+  --color-accent-fg: var(--c-accent-fg);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-ok: var(--c-ok);
+  --color-ok-soft: var(--c-ok-soft);
+  --color-warn: var(--c-warn);
+  --color-warn-soft: var(--c-warn-soft);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-info: var(--c-info);
+  --color-info-soft: var(--c-info-soft);
+}
+
+:root {
+  color-scheme: dark;
+  --c-bg: #0d0f13;
+  --c-surface: #14171d;
+  --c-surface-2: #1b1f27;
+  --c-surface-3: #232833;
+  --c-line: #262b36;
+  --c-line-strong: #343b49;
+  --c-fg: #e6e8ee;
+  --c-fg-muted: #9aa3b5;
+  --c-fg-faint: #626b7d;
+  --c-accent: #7c8cff;
+  --c-accent-fg: #0d0f13;
+  --c-accent-soft: rgb(124 140 255 / 0.14);
+  --c-ok: #4ade80;
+  --c-ok-soft: rgb(74 222 128 / 0.14);
+  --c-warn: #fbbf24;
+  --c-warn-soft: rgb(251 191 36 / 0.14);
+  --c-danger: #f87171;
+  --c-danger-soft: rgb(248 113 113 / 0.14);
+  --c-info: #38bdf8;
+  --c-info-soft: rgb(56 189 248 / 0.14);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --c-bg: #f4f5f8;
+    --c-surface: #ffffff;
+    --c-surface-2: #f0f2f6;
+    --c-surface-3: #e5e8ee;
+    --c-line: #e2e5ec;
+    --c-line-strong: #c9ceda;
+    --c-fg: #14171d;
+    --c-fg-muted: #5b6475;
+    --c-fg-faint: #8b93a5;
+    --c-accent: #4f5fe0;
+    --c-accent-fg: #ffffff;
+    --c-accent-soft: rgb(79 95 224 / 0.12);
+    --c-ok: #16a34a;
+    --c-ok-soft: rgb(22 163 74 / 0.12);
+    --c-warn: #d97706;
+    --c-warn-soft: rgb(217 119 6 / 0.12);
+    --c-danger: #dc2626;
+    --c-danger-soft: rgb(220 38 38 / 0.12);
+    --c-info: #0284c7;
+    --c-info-soft: rgb(2 132 199 / 0.12);
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg text-fg font-sans text-[13px] antialiased;
+  margin: 0;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-line-strong) transparent;
+}
+
+/* markdown prose, kept minimal and dense */
+.prose-dispatch {
+  @apply text-[13px] leading-relaxed text-fg;
+}
+.prose-dispatch > * + * {
+  margin-top: 0.6em;
+}
+.prose-dispatch h1,
+.prose-dispatch h2,
+.prose-dispatch h3,
+.prose-dispatch h4 {
+  @apply font-semibold text-fg;
+  margin-top: 1.1em;
+  line-height: 1.3;
+}
+.prose-dispatch h1 { font-size: 1.25em; }
+.prose-dispatch h2 { font-size: 1.12em; }
+.prose-dispatch h3 { font-size: 1em; }
+.prose-dispatch p { margin: 0; }
+.prose-dispatch ul,
+.prose-dispatch ol {
+  padding-left: 1.4em;
+}
+.prose-dispatch ul { list-style: disc; }
+.prose-dispatch ol { list-style: decimal; }
+.prose-dispatch li + li { margin-top: 0.15em; }
+.prose-dispatch a { @apply text-accent underline underline-offset-2; }
+.prose-dispatch code {
+  @apply font-mono text-[12px] bg-surface-3 rounded px-1 py-px;
+}
+.prose-dispatch pre {
+  @apply bg-surface-2 border border-line rounded-md p-3 overflow-x-auto text-[12px] font-mono;
+}
+.prose-dispatch pre code { background: transparent; padding: 0; }
+.prose-dispatch blockquote {
+  @apply border-l-2 border-line-strong pl-3 text-fg-muted;
+}
+.prose-dispatch table { @apply w-full text-[12px]; border-collapse: collapse; }
+.prose-dispatch th,
+.prose-dispatch td { @apply border border-line px-2 py-1 text-left; }
+.prose-dispatch hr { @apply border-line; }
+.prose-dispatch input[type="checkbox"] { margin-right: 0.4em; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.toast-in { animation: toast-in 150ms ease-out; }

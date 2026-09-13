@@ -1,0 +1,6 @@
+tasks/*/*.stream.jsonl
+tasks/*/*.pr.json
+.DS_Store
+*.swp
+.idea/
+.vscode/

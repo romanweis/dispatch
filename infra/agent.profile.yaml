@@ -1,0 +1,47 @@
+# Incus profile "dispatch-agent"
+#
+# Applied on top of "default" to every project base container and every ticket
+# container (t-<id>). Install/refresh with:
+#
+#   incus profile create dispatch-agent            # once
+#   incus profile edit   dispatch-agent < infra/agent.profile.yaml
+#
+# (infra/setup-server.sh does exactly that, idempotently.)
+#
+# About `shift: "true"` on the disk devices
+# ------------------------------------------
+# Containers are unprivileged: container uid 0..65535 is mapped to a high host
+# uid range (e.g. 1000000..1065535). Without shifting, host files owned by
+# roman (uid 1000) would show up inside the container as "nobody" and the
+# `agent` user (container uid 1000) could not read the Claude credentials.
+# `shift: "true"` makes Incus mount the directory through an idmapped mount
+# (kernel >= 5.12 on ext4, which the target root fs is) so host uid 1000 is
+# presented as container uid 1000 and writes from the container land on the
+# host as roman again. No chown of /srv/dispatch/secrets is ever needed.
+#
+# Nesting / syscall interception
+# ------------------------------
+# security.nesting lets the container run its own container runtime (Docker
+# CE inside the agent image). The two syscall intercepts let Docker's
+# overlay/BuildKit create device nodes and set trusted xattrs, which an
+# unprivileged container is otherwise not allowed to do.
+# infra/build-agent-base.sh sets the same three keys on the throw-away build
+# container so the image is produced under identical conditions.
+description: Dispatch agent container (Claude Code + gh + docker; shared credential mounts)
+config:
+  security.nesting: "true"
+  security.syscalls.intercept.mknod: "true"
+  security.syscalls.intercept.setxattr: "true"
+  limits.cpu: "8"
+  limits.memory: 16GiB
+devices:
+  claude-secrets:
+    type: disk
+    source: /srv/dispatch/secrets/claude
+    path: /home/agent/.claude
+    shift: "true"
+  gh-secrets:
+    type: disk
+    source: /srv/dispatch/secrets/gh
+    path: /home/agent/.config/gh
+    shift: "true"

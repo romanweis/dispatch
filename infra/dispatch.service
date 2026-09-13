@@ -1,0 +1,36 @@
+# Dispatch API + UI, run as a *user* systemd unit for roman.
+#
+# Install (done by infra/setup-server.sh):
+#   install -Dm644 infra/dispatch.service ~/.config/systemd/user/dispatch.service
+#   sudo loginctl enable-linger roman
+#   systemctl --user daemon-reload && systemctl --user enable dispatch
+#
+# Start / logs (after infra/deploy.sh has produced the binary):
+#   systemctl --user restart dispatch
+#   journalctl --user -u dispatch -f
+#
+# Runs as roman on purpose: the API drives `incus` (roman is in incus-admin)
+# and `gh` (roman's login) with the same identity the build scripts use.
+[Unit]
+Description=Dispatch ticket board (API + UI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/srv/dispatch/.env
+WorkingDirectory=%h/.local/opt/dispatch
+ExecStart=%h/.local/opt/dispatch/Dispatch.Api
+Restart=on-failure
+RestartSec=3
+# .NET needs DOTNET_ROOT for the user-local SDK/runtime install; PATH must
+# contain incus, gh, git (/usr/bin), dotnet (%h/.dotnet) and ~/.local/bin.
+Environment=DOTNET_ROOT=%h/.dotnet
+Environment=PATH=%h/.dotnet:%h/.dotnet/tools:%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+Environment=ASPNETCORE_ENVIRONMENT=Production
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# ticket - in-container CLI for talking to the Dispatch board.
+#
+# Runs inside a per-ticket container. Every call is scoped to the ticket named by
+# $TICKET_ID and authenticated with the per-ticket $DISPATCH_TOKEN. See docs/api.md
+# in the dispatch repo for the HTTP contract this script speaks.
+
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+ticket - talk to the Dispatch board from inside a ticket container
+
+Usage:
+  ticket show                         print id, title, status, body, spec, open questions
+  ticket ask "q1" ["q2" ...]          ask the human one or more questions, then STOP the turn
+  ticket spec <file|->                submit the refined spec (markdown) from a file or stdin
+  ticket comment "text"               post a comment on the ticket (author: agent)
+  ticket progress <phase> [note]      post a progress milestone shown on the card
+  ticket env                          print the Dispatch environment variables (debug)
+  ticket --help                       this text
+
+Environment (set by Dispatch in every ticket container):
+  DISPATCH_URL       e.g. http://10.10.10.1:9300
+  DISPATCH_TOKEN     bearer token, valid only for this ticket
+  TICKET_ID          numeric ticket id (equals the orchestrator feature id)
+  DISPATCH_PROJECT   project name
+
+Exit codes: 0 ok, 1 usage or environment error, 2 HTTP error (server message printed).
+USAGE
+}
+
+die() { printf 'ticket: %s\n' "$*" >&2; exit 1; }
+
+need_env() {
+  local missing=()
+  for v in DISPATCH_URL DISPATCH_TOKEN TICKET_ID; do
+    [ -n "${!v:-}" ] || missing+=("$v")
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    die "missing environment: ${missing[*]}. This command only works inside a Dispatch ticket container (run 'ticket env' to see what is set)."
+  fi
+  command -v curl >/dev/null || die "curl not found"
+  command -v jq   >/dev/null || die "jq not found"
+}
+
+# api <method> <path-under-ticket> [json-body]
+# Prints the response body on success. On HTTP >= 400 prints the server's `error`
+# field (or the raw body) to stderr and exits 2.
+api() {
+  local method="$1" path="$2" body="${3:-}"
+  local url="${DISPATCH_URL%/}/api/tickets/${TICKET_ID}${path}"
+  local out rc
+  local -a args=(-sS --fail-with-body -X "$method" "$url"
+                 -H "Authorization: Bearer ${DISPATCH_TOKEN}"
+                 -H 'Accept: application/json')
+  if [ -n "$body" ]; then
+    args+=(-H 'Content-Type: application/json' --data-binary "$body")
+  fi
+  set +e
+  out="$(curl "${args[@]}" 2>&1)"
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    local msg
+    msg="$(printf '%s' "$out" | jq -r 'if type == "object" then (.error // .title // .) else . end' 2>/dev/null || true)"
+    [ -n "$msg" ] || msg="$out"
+    printf 'ticket: %s %s failed: %s\n' "$method" "$path" "$msg" >&2
+    exit 2
+  fi
+  printf '%s' "$out"
+}
+
+cmd_show() {
+  need_env
+  api GET "" | jq -r '
+    def sep: "----------------------------------------";
+    "Ticket #\(.id)  [\(.status)]  project: \(.projectName)",
+    "Title:  \(.title)",
+    (if .slug then "Slug:   \(.slug)" else empty end),
+    "",
+    "Body:", sep, (.body // "(empty)"), sep,
+    "",
+    (if .spec then ("Spec:", sep, .spec, sep) else "Spec:   (none yet)" end),
+    "",
+    (
+      [.questions[]? | select(.answer == null)] as $open
+      | if ($open | length) > 0 then
+          ("Open questions (\($open | length)):",
+           ($open[] | "  [\(.id)] \(.text)"))
+        else "Open questions: none" end
+    ),
+    (
+      [.questions[]? | select(.answer != null)] as $answered
+      | if ($answered | length) > 0 then
+          ("", "Answered questions:",
+           ($answered[] | "  Q[\(.id)]: \(.text)", "  A:     \(.answer)"))
+        else empty end
+    )
+  '
+}
+
+cmd_ask() {
+  need_env
+  [ "$#" -ge 1 ] || die "usage: ticket ask \"question\" [\"question\" ...]"
+  local payload
+  payload="$(jq -cn '$ARGS.positional | {questions: .}' --args "$@")"
+  local res
+  res="$(api POST "/questions" "$payload")"
+  local n
+  n="$(printf '%s' "$res" | jq 'length' 2>/dev/null || echo "$#")"
+  printf 'Asked %s question(s) on ticket #%s:\n' "$n" "$TICKET_ID"
+  printf '%s' "$res" | jq -r '.[] | "  [\(.id)] \(.text)"' 2>/dev/null || printf '  %s\n' "$@"
+  echo
+  echo "Stop now: the user will answer and resume this session."
+}
+
+cmd_spec() {
+  need_env
+  local src="${1:-}"
+  [ -n "$src" ] || die "usage: ticket spec <file|->"
+  local content
+  if [ "$src" = "-" ]; then
+    content="$(cat)"
+  else
+    [ -f "$src" ] || die "spec file not found: $src"
+    content="$(cat -- "$src")"
+  fi
+  [ -n "$(printf '%s' "$content" | tr -d '[:space:]')" ] || die "spec is empty"
+  local payload
+  payload="$(jq -cn --arg spec "$content" '{spec: $spec}')"
+  api POST "/spec" "$payload" | jq -r '"Spec submitted for ticket #\(.id) (\(.status)). It becomes the feature file when the human starts the ticket."'
+}
+
+cmd_comment() {
+  need_env
+  local text="${1:-}"
+  [ -n "$text" ] || die "usage: ticket comment \"text\""
+  local payload
+  payload="$(jq -cn --arg text "$text" '{text: $text}')"
+  api POST "/comments" "$payload" | jq -r '"Comment #\(.id) posted (\(.createdAt))."'
+}
+
+cmd_progress() {
+  need_env
+  local phase="${1:-}"; shift || true
+  [ -n "$phase" ] || die "usage: ticket progress <phase> [note]"
+  local note="${*:-}"
+  local payload
+  if [ -n "$note" ]; then
+    payload="$(jq -cn --arg phase "$phase" --arg note "$note" '{phase: $phase, note: $note}')"
+  else
+    payload="$(jq -cn --arg phase "$phase" '{phase: $phase}')"
+  fi
+  api POST "/progress" "$payload" >/dev/null
+  if [ -n "$note" ]; then
+    printf 'Progress: %s (%s)\n' "$phase" "$note"
+  else
+    printf 'Progress: %s\n' "$phase"
+  fi
+}
+
+cmd_env() {
+  local v
+  for v in DISPATCH_URL TICKET_ID DISPATCH_PROJECT; do
+    printf '%-17s %s\n' "$v" "${!v:-<unset>}"
+  done
+  if [ -n "${DISPATCH_TOKEN:-}" ]; then
+    printf '%-17s %s\n' DISPATCH_TOKEN "<set, ${#DISPATCH_TOKEN} chars>"
+  else
+    printf '%-17s %s\n' DISPATCH_TOKEN "<unset>"
+  fi
+}
+
+main() {
+  local cmd="${1:-}"
+  [ -n "$cmd" ] || { usage; exit 1; }
+  shift
+  case "$cmd" in
+    show)       cmd_show "$@" ;;
+    ask)        cmd_ask "$@" ;;
+    spec)       cmd_spec "$@" ;;
+    comment)    cmd_comment "$@" ;;
+    progress)   cmd_progress "$@" ;;
+    env)        cmd_env "$@" ;;
+    -h|--help|help) usage ;;
+    *)          printf 'ticket: unknown command: %s\n\n' "$cmd" >&2; usage >&2; exit 1 ;;
+  esac
+}
+
+main "$@"

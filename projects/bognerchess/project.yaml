@@ -1,0 +1,36 @@
+name: bognerchess
+displayName: Bogner Chess
+org: bognerchess
+workspace: /home/agent/bognerchess
+maxParallel: 3
+repos:
+  - name: backend
+    role: backend
+  - name: academy
+    role: astro
+  - name: student
+    role: frontend-relay
+  - name: trainer
+    role: frontend-relay
+  - name: tournaments
+    role: frontend-relay
+  - name: chess-ai
+    role: python
+  - name: opening-trainer
+    role: python
+  - name: infra
+    role: infra
+orchestrator:
+  repo: orchestrator
+  deployWorkflow: deploy.yml
+  requiredChecks: []
+claude:
+  permissionMode: bypassPermissions
+  allowedTools: []
+  model: null
+  maxTurnsRefine: 60
+  maxTurnsWork: 400
+env:
+  ASPNETCORE_ENVIRONMENT: Development
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
