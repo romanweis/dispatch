@@ -74,6 +74,10 @@ if id -u ubuntu >/dev/null 2>&1; then
   userdel -r ubuntu 2>/dev/null || userdel ubuntu
   rm -rf /home/ubuntu
 fi
+# userdel leaves the "ubuntu" group behind when the image pre-seeded it; free GID 1000.
+if getent group 1000 >/dev/null && [ "$(getent group 1000 | cut -d: -f1)" != "agent" ]; then
+  groupdel "$(getent group 1000 | cut -d: -f1)"
+fi
 if ! getent group agent >/dev/null; then groupadd -g 1000 agent; fi
 if ! id -u agent >/dev/null 2>&1; then
   useradd -m -u 1000 -g 1000 -s /bin/bash -d /home/agent agent
