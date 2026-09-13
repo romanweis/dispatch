@@ -8,16 +8,18 @@
 #
 # (infra/setup-server.sh does exactly that, idempotently.)
 #
-# About `shift: "true"` on the disk devices
-# ------------------------------------------
+# About `raw.idmap: both 1000 1000`
+# ---------------------------------
 # Containers are unprivileged: container uid 0..65535 is mapped to a high host
-# uid range (e.g. 1000000..1065535). Without shifting, host files owned by
-# roman (uid 1000) would show up inside the container as "nobody" and the
-# `agent` user (container uid 1000) could not read the Claude credentials.
-# `shift: "true"` makes Incus mount the directory through an idmapped mount
-# (kernel >= 5.12 on ext4, which the target root fs is) so host uid 1000 is
-# presented as container uid 1000 and writes from the container land on the
-# host as roman again. No chown of /srv/dispatch/secrets is ever needed.
+# uid range (e.g. 1000000..1065535). Without help, host files owned by roman
+# (uid 1000) would show up inside the container as "nobody" and the `agent`
+# user (container uid 1000) could not read the Claude credentials.
+# `raw.idmap` punches one hole in the map: host uid/gid 1000 <-> container
+# uid/gid 1000. Writes from the container land on the host as roman again, so
+# no chown of /srv/dispatch/secrets is ever needed. It requires the lines
+# `root:1000:1` in /etc/subuid and /etc/subgid (setup-server.sh adds them).
+# (`shift: "true"` on the disk devices would be the alternative, but the Ubuntu
+# incus 6.0 build reports "idmapping abilities are required but aren't supported".)
 #
 # Nesting / syscall interception
 # ------------------------------
@@ -34,14 +36,13 @@ config:
   security.syscalls.intercept.setxattr: "true"
   limits.cpu: "8"
   limits.memory: 16GiB
+  raw.idmap: both 1000 1000
 devices:
   claude-secrets:
     type: disk
     source: /srv/dispatch/secrets/claude
     path: /home/agent/.claude
-    shift: "true"
   gh-secrets:
     type: disk
     source: /srv/dispatch/secrets/gh
     path: /home/agent/.config/gh
-    shift: "true"
