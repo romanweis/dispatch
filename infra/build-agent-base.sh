@@ -54,7 +54,7 @@ ok "cloud-init finished"
 
 # ---------------------------------------------------------------------------
 step "provision (root, streaming)"
-incus exec "$BUILD" --env DEBIAN_FRONTEND=noninteractive -- bash -s <<'INSIDE'
+incus exec "$BUILD" --cwd /tmp --env HOME=/root --env DEBIAN_FRONTEND=noninteractive -- bash -s <<'INSIDE'
 set -euo pipefail
 log() { printf '    [c] %s\n' "$*"; }
 
@@ -98,7 +98,7 @@ if ! command -v node >/dev/null 2>&1 || ! node -v | grep -q '^v22\.'; then
   apt-get install -y -qq nodejs
 fi
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-corepack enable pnpm
+cd /tmp && corepack enable pnpm && corepack prepare pnpm@10.27.0 --activate
 sudo -u agent -H env COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm --version >/dev/null
 
 log "claude code"
