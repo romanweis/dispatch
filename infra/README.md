@@ -82,3 +82,13 @@ Ad-hoc test container from a base: `incus copy bognerchess-base t-test && incus 
 - **Containers cannot reach the API** — `DISPATCH_URL` uses the `incusbr0` gateway address (`incus network get incusbr0 ipv4.address`). If ufw is active, `setup-server.sh` added an allow rule for port 9300 on `incusbr0`; check `sudo ufw status`.
 - **`dispatch` service will not start** — `journalctl --user -u dispatch -n 100`. Common causes: `.env` DB password out of sync (re-run `setup-server.sh`, it re-applies the password from `.env` to the role), `~/.dotnet` missing (`DOTNET_ROOT`), or the incus-admin group not yet visible to the user manager (see above).
 - **Postgres** — `sudo -u postgres psql -c '\du'`, `psql "postgresql://dispatch:<pw>@127.0.0.1:5432/dispatch"` with the password from `/srv/dispatch/.env`.
+
+## ufw and the Incus bridge
+
+If containers come up without an IPv4 address (`build-agent-base.sh` fails with
+"no IPv4 on eth0"), the host firewall is dropping DHCP on `incusbr0`. `setup-server.sh`
+adds these rules when ufw is active; apply them by hand on an older setup:
+
+    sudo ufw allow in on incusbr0
+    sudo ufw route allow in on incusbr0
+    sudo ufw route allow out on incusbr0
