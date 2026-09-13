@@ -232,6 +232,19 @@ chmod 600 "$ENV_FILE"
 # ---------------------------------------------------------------------------
 # 7. Incus profile dispatch-agent
 # ---------------------------------------------------------------------------
+step "subuid/subgid hole for raw.idmap (host uid 1000 <-> container uid 1000)"
+idmap_changed=0
+for f in /etc/subuid /etc/subgid; do
+  if ! grep -qx 'root:1000:1' "$f" 2>/dev/null; then
+    echo 'root:1000:1' | sudo tee -a "$f" >/dev/null
+    ok "added root:1000:1 to $f"
+    idmap_changed=1
+  else
+    skip "$f already has root:1000:1"
+  fi
+done
+if [ "$idmap_changed" = 1 ]; then sudo systemctl restart incus; ok "incus restarted"; fi
+
 step "incus profile $PROFILE_NAME"
 if ! incus profile show "$PROFILE_NAME" >/dev/null 2>&1; then
   incus profile create "$PROFILE_NAME" >/dev/null
