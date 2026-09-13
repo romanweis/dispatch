@@ -173,7 +173,7 @@ function stopFeed() {
 
 // ---- selectors ------------------------------------------------------------
 
-export const selectVisibleTickets = (s: BoardState): Ticket[] => {
+export const selectVisibleTickets = (s: Pick<BoardState, "tickets" | "projectFilter">): Ticket[] => {
   const all = Object.values(s.tickets);
   const filtered = s.projectFilter === null ? all : all.filter((t) => t.projectId === s.projectFilter);
   return filtered.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : b.id - a.id));

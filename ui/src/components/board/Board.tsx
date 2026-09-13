@@ -18,8 +18,13 @@ import { TicketCard } from "./TicketCard";
 import { statusFromDragId, ticketIdFromDragId } from "./dnd";
 
 export function Board({ activeTicketId }: { activeTicketId: number | null }) {
-  const tickets = useBoardStore(selectVisibleTickets);
   const allTickets = useBoardStore((s) => s.tickets);
+  const projectFilter = useBoardStore((s) => s.projectFilter);
+  // Derive in the component: a selector returning a fresh array would re-render forever under useSyncExternalStore.
+  const tickets = useMemo(
+    () => selectVisibleTickets({ tickets: allTickets, projectFilter }),
+    [allTickets, projectFilter],
+  );
   const moveTicket = useBoardStore((s) => s.moveTicket);
   const [dragging, setDragging] = useState<Ticket | null>(null);
 
