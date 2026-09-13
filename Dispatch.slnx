@@ -3,5 +3,7 @@
     <Project Path="server/Dispatch.Claude/Dispatch.Claude.csproj" />
     <Project Path="server/Dispatch.Claude.Tests/Dispatch.Claude.Tests.csproj" />
     <Project Path="server/Dispatch.Claude.Tests/FakeClaude/FakeClaude.csproj" />
+    <Project Path="server/Dispatch.Api/Dispatch.Api.csproj" />
+    <Project Path="server/Dispatch.Api.Tests/Dispatch.Api.Tests.csproj" />
   </Folder>
 </Solution>

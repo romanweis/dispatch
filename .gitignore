@@ -8,3 +8,5 @@ ui/dist/
 *.log
 test-results/
 playwright-report/
+server/Dispatch.Api/wwwroot/*
+!server/Dispatch.Api/wwwroot/.gitkeep

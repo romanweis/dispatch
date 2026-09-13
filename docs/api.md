@@ -37,6 +37,7 @@ Ticket {
   result: object | null;                // raw tasks/<id>/result.json
   openQuestions: number;
   activeRunId: number | null;
+  lastProgress: { phase: string; note: string | null; at: string } | null;   // latest `ticket progress` note
   createdAt: string; updatedAt: string;
 }
 
