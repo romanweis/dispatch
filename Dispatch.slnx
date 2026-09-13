@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/server/">
+    <Project Path="server/Dispatch.Claude/Dispatch.Claude.csproj" />
+    <Project Path="server/Dispatch.Claude.Tests/Dispatch.Claude.Tests.csproj" />
+    <Project Path="server/Dispatch.Claude.Tests/FakeClaude/FakeClaude.csproj" />
+  </Folder>
+</Solution>

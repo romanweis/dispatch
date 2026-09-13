@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+        <RootNamespace>Dispatch.Claude.Tests</RootNamespace>
+        <DefaultItemExcludes>$(DefaultItemExcludes);FakeClaude\**</DefaultItemExcludes>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+        <PackageReference Include="xunit" Version="2.9.2" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Dispatch.Claude\Dispatch.Claude.csproj" />
+        <ProjectReference Include="FakeClaude\FakeClaude.csproj">
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+            <Private>false</Private>
+            <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+        </ProjectReference>
+    </ItemGroup>
+    <ItemGroup>
+        <None Update="Fixtures\**\*.jsonl">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+    <Target Name="CopyFakeClaudeOutput" AfterTargets="Build" DependsOnTargets="ResolveProjectReferences">
+        <PropertyGroup>
+            <FakeClaudeSourceDir>$(MSBuildThisFileDirectory)FakeClaude\bin\$(Configuration)\$(TargetFramework)\</FakeClaudeSourceDir>
+            <FakeClaudeDestDir>$(OutDir)FakeClaude\</FakeClaudeDestDir>
+        </PropertyGroup>
+        <ItemGroup>
+            <FakeClaudeFiles Include="$(FakeClaudeSourceDir)**\*.*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(FakeClaudeFiles)"
+              DestinationFolder="$(FakeClaudeDestDir)%(RecursiveDir)"
+              SkipUnchangedFiles="true"
+              Condition="Exists('$(FakeClaudeSourceDir)')" />
+    </Target>
+</Project>

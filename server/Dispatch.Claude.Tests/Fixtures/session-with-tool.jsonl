@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"sess-tool","model":"claude-opus-4-7","cwd":"C:/work","tools":["Read"],"permissionMode":"acceptEdits"}
+{"type":"assistant","message":{"id":"msg_a","role":"assistant","content":[{"type":"text","text":"Reading the file."},{"type":"tool_use","id":"toolu_42","name":"Read","input":{"file_path":"C:/work/README.md"}}],"stop_reason":"tool_use"}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_42","content":"file contents here","is_error":false}]}}
+{"type":"assistant","message":{"id":"msg_b","role":"assistant","content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn"}}
+{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":2500.0,"duration_api_ms":1800.0,"session_id":"sess-tool"}
