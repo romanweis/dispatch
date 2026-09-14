@@ -215,7 +215,7 @@ cmd_migrate() {
   fi
   echo "bc-dev: running Stamy.Migrations against $PG_DB@127.0.0.1:$PG_PORT $*"
   SECRETS_PATH="$SECRETS_DIR" ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Development}" \
-    dotnet run --project "$MIGRATIONS_PROJECT" -- --connection "$CONN" "$@"
+    dotnet run --no-launch-profile --project "$MIGRATIONS_PROJECT" -- --connection "$CONN" "$@"
 }
 
 cmd_psql() {
