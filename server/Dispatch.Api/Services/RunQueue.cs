@@ -136,6 +136,8 @@ public sealed class RunQueue(
         }
     }
 
+    internal const string ZeroTurnPrefix = "claude returned zero turns";
+
     internal async Task ExecuteRunAsync(long runId, CancellationToken hostCt)
     {
         var runToken = cancellations.Register(runId);
@@ -210,6 +212,7 @@ public sealed class RunQueue(
         var lastFlush = Stopwatch.StartNew();
         var resultSeen = false;
         var resultIsError = false;
+        int? resultTurns = null;
         var sessionStored = run.SessionId is not null;
 
         async Task FlushAsync()
@@ -279,6 +282,7 @@ public sealed class RunQueue(
             {
                 resultSeen = true;
                 resultIsError = result.IsError;
+                resultTurns = result.NumTurns;
                 await FlushAsync();
                 break;
             }
@@ -312,6 +316,40 @@ public sealed class RunQueue(
         }
 
         ct.ThrowIfCancellationRequested();
+
+        // A resumed session can spend its only turn on a leftover background-task notification
+        // and exit with num_turns == 0 without ever reading our message. Re-queue the same
+        // prompt once; the second attempt starts with the notification already consumed.
+        if (resultSeen && !resultIsError && resultTurns == 0)
+        {
+            var alreadyRetried = await db.Runs.AnyAsync(
+                r => r.TicketId == ticket.Id && r.Id != run.Id && r.Prompt == run.Prompt && r.Error != null && r.Error.StartsWith(ZeroTurnPrefix),
+                CancellationToken.None);
+            if (!alreadyRetried)
+            {
+                var retry = new Run
+                {
+                    TicketId = ticket.Id,
+                    Kind = run.Kind,
+                    Status = RunStatus.Pending,
+                    Prompt = run.Prompt,
+                    CreatedAt = DateTime.UtcNow,
+                };
+                db.Runs.Add(retry);
+                run.Status = RunStatus.Failed;
+                run.ExitCode = exitCode;
+                run.EndedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(CancellationToken.None);
+                run.Error = $"{ZeroTurnPrefix}; retried as run {retry.Id}";
+                ticket.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(CancellationToken.None);
+                logger.LogWarning("Run {RunId}: claude returned zero turns; re-queued as run {RetryId}", run.Id, retry.Id);
+                signal.Wake();
+                return;
+            }
+
+            logger.LogWarning("Run {RunId}: claude returned zero turns again; giving up", run.Id);
+        }
 
         // Reload run facts written by the CLI endpoints during the run (other DbContexts).
         var newQuestions = await db.Questions.AnyAsync(q => q.RunId == run.Id, CancellationToken.None);
