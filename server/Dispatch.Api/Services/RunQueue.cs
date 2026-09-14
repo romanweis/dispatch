@@ -198,6 +198,7 @@ public sealed class RunQueue(
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
+        await DropStaleSessionAsync(run, ticket, project, ct);
         var sessionOptions = BuildSessionOptions(run, ticket, project);
         await using var claude = await launcher.LaunchAsync(
             sessionOptions,
@@ -379,6 +380,41 @@ public sealed class RunQueue(
         ticket.Status = persistedTicket == TicketStatus.Done ? TicketStatus.Done : ticketStatus;
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// `claude --resume` aborts with "No conversation found" when the transcript is gone
+    /// (credentials mount changed, ~/.claude cleaned, container rebuilt from base). Check the
+    /// transcript file inside the container first and start a fresh session instead of failing.
+    /// </summary>
+    private async Task DropStaleSessionAsync(Run run, Ticket ticket, LoadedProject project, CancellationToken ct)
+    {
+        var sid = ticket.ClaudeSessionId;
+        if (string.IsNullOrWhiteSpace(sid) || options.Value.FakeIncus)
+        {
+            return;
+        }
+
+        // Claude stores transcripts under ~/.claude/projects/<cwd with '/' replaced by '-'>/<session>.jsonl
+        var cwd = project.Config.OrchestratorDir;
+        var encoded = cwd.Replace('/', '-');
+        var path = $"/home/agent/.claude/projects/{encoded}/{sid}.jsonl";
+        try
+        {
+            var result = await incus.ExecAsync(ticket.ContainerName, ["test", "-f", path], cwd, true, ct);
+            if (result.ExitCode == 0)
+            {
+                return;
+            }
+
+            logger.LogWarning("Run {RunId}: session {SessionId} has no transcript at {Path}; starting a fresh session", run.Id, sid, path);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Run {RunId}: could not verify session {SessionId}; starting a fresh session", run.Id, sid);
+        }
+
+        ticket.ClaudeSessionId = null;
     }
 
     internal ClaudeAgentSessionOptions BuildSessionOptions(Run run, Ticket ticket, LoadedProject project)
