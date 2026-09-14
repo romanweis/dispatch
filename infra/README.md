@@ -92,3 +92,13 @@ adds these rules when ufw is active; apply them by hand on an older setup:
     sudo ufw allow in on incusbr0
     sudo ufw route allow in on incusbr0
     sudo ufw route allow out on incusbr0
+
+## Docker inside agent containers
+
+`docker run` failing with `open sysctl net.ipv4.ip_unprivileged_port_start ...: permission denied`
+means the container is running under the Incus-generated AppArmor profile. `agent.profile.yaml`
+sets `raw.lxc` to run agent containers unconfined and masks `/sys/kernel/security`; re-apply
+the profile with `incus profile edit dispatch-agent < infra/agent.profile.yaml` and restart the
+container. Containers stay unprivileged (user namespace, seccomp). Also note that
+`incus exec --user 1000 --group 1000` carries no supplementary groups, so the Docker socket is
+owned by group `agent` via a `docker.socket` drop-in (see `build-agent-base.sh`).

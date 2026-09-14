@@ -42,6 +42,15 @@ config:
   limits.cpu: "8"
   limits.memory: 16GiB
   raw.idmap: both 1000 1000
+  # Docker inside the container: the Incus-generated AppArmor profile makes runc/crun fail
+  # with "open sysctl net.ipv4.ip_unprivileged_port_start ...: permission denied" for every
+  # container that gets its own network namespace. Running the outer container without that
+  # profile fixes it; the container stays unprivileged (user namespace + seccomp). Masking
+  # securityfs stops dockerd from trying to load its own AppArmor profile, which it cannot
+  # do without the LXC AppArmor namespace and would otherwise refuse to start containers.
+  raw.lxc: |
+    lxc.apparmor.profile=unconfined
+    lxc.mount.entry=tmpfs sys/kernel/security tmpfs defaults 0 0
 devices:
   claude-secrets:
     type: disk
