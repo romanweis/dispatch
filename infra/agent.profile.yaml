@@ -8,6 +8,11 @@
 #
 # (infra/setup-server.sh does exactly that, idempotently.)
 #
+# Claude credentials: the host user's LIVE ~/.claude is mounted, not a copy. Claude
+# rotates the OAuth refresh token on every refresh, so a copied .credentials.json dies
+# as soon as the host (or another copy) refreshes first ("OAuth session expired and
+# could not be refreshed"). One shared directory keeps every session on the same token.
+#
 # About `raw.idmap: both 1000 1000`
 # ---------------------------------
 # Containers are unprivileged: container uid 0..65535 is mapped to a high host
@@ -40,7 +45,7 @@ config:
 devices:
   claude-secrets:
     type: disk
-    source: /srv/dispatch/secrets/claude
+    source: /home/roman/.claude
     path: /home/agent/.claude
   gh-secrets:
     type: disk

@@ -121,16 +121,14 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 usermod -aG docker agent
 # Dispatch runs `incus exec --user 1000 --group 1000`, which carries no supplementary
-# groups, so membership in "docker" is not enough: give the socket to agent's primary group.
-install -d -m 0755 /etc/docker
-python3 - <<'PY'
-import json, os
-p = "/etc/docker/daemon.json"
-d = json.load(open(p)) if os.path.exists(p) else {}
-d["group"] = "agent"
-json.dump(d, open(p, "w"), indent=2)
-PY
-systemctl restart docker || true
+# groups, so membership in "docker" is not enough. The socket is created by systemd's
+# docker.socket unit (not by dockerd), so override its group there.
+install -d /etc/systemd/system/docker.socket.d
+printf '[Socket]
+SocketGroup=agent
+' > /etc/systemd/system/docker.socket.d/10-agent-group.conf
+systemctl daemon-reload
+systemctl restart docker.socket docker || true
 systemctl enable docker >/dev/null 2>&1 || true
 systemctl restart docker || true
 sleep 2
