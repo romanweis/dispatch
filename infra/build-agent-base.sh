@@ -120,6 +120,17 @@ if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh >/dev/null
 fi
 usermod -aG docker agent
+# Dispatch runs `incus exec --user 1000 --group 1000`, which carries no supplementary
+# groups, so membership in "docker" is not enough: give the socket to agent's primary group.
+install -d -m 0755 /etc/docker
+python3 - <<'PY'
+import json, os
+p = "/etc/docker/daemon.json"
+d = json.load(open(p)) if os.path.exists(p) else {}
+d["group"] = "agent"
+json.dump(d, open(p, "w"), indent=2)
+PY
+systemctl restart docker || true
 systemctl enable docker >/dev/null 2>&1 || true
 systemctl restart docker || true
 sleep 2
