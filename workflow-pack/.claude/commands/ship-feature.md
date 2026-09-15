@@ -27,7 +27,7 @@ This evaluates every guard and merges nothing. Read the output. If a guard fails
 scripts/merge-fleet.sh $1
 ```
 
-The script owns the whole sequence and you should not second-guess it mid-run. Per tier it re-checks the guards, merges, waits for `{{DEPLOY_WORKFLOW}}`, and (when `PROBE_HOSTS` is configured) **probes production directly** before the next tier is allowed to merge. That last part is the point: a backend can take far longer to go live than a static client, so merging the fleet back-to-back would put the clients live long before the schema they query.
+Run it in the foreground with a long timeout (60 minutes is fine) and wait for it. Never start it in the background: this session is headless and a background process dies when your turn ends, leaving the fleet half-merged. The script owns the whole sequence and you should not second-guess it mid-run. Per tier it re-checks the guards, merges, waits for `{{DEPLOY_WORKFLOW}}`, and (when `PROBE_HOSTS` is configured) **probes production directly** before the next tier is allowed to merge. That last part is the point: a backend can take far longer to go live than a static client, so merging the fleet back-to-back would put the clients live long before the schema they query.
 
 Expect it to take a while. A backend + clients fleet can be 25-40 minutes, most of it waiting. Do not run it with a short timeout, and do not push anything to a fleet repo's `main` while it runs.
 

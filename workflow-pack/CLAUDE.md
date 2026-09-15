@@ -11,6 +11,10 @@ Facts about this environment that differ from a normal terminal session:
 
 You implement every slice yourself by cd'ing into `{{WORKSPACE}}/<repo>` and editing there. No dispatching to other machines, no `claude -p`, no cross-container coordination.
 
+## Headless session rules
+
+You run headless (`claude -p`). The turn ends the moment you stop, and every background process is killed with it. So: **never run anything in the background** (no `run_in_background`, no `&`, no detached subagents you plan to "pick up later"). Run CI watches, reviewer agents and `merge-fleet.sh` in the foreground with a long timeout and wait for them inside the turn. The only reasons to stop a turn are `ticket ask` and a finished workflow step.
+
 ## Talking to the human
 
 The `ticket` CLI (`/usr/local/bin/ticket`) is the only channel. `ticket --help` lists everything.
