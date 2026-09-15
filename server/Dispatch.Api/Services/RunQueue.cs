@@ -353,6 +353,8 @@ public sealed class RunQueue(
 
         // Reload run facts written by the CLI endpoints during the run (other DbContexts).
         var newQuestions = await db.Questions.AnyAsync(q => q.RunId == run.Id, CancellationToken.None);
+        var shipped = run.Kind == RunKind.Ship
+                      && await db.ProgressNotes.AnyAsync(n => n.RunId == run.Id && n.Phase == "shipped", CancellationToken.None);
         var specSubmitted = await db.Runs.Where(r => r.Id == run.Id).Select(r => r.SpecSubmitted).FirstAsync(CancellationToken.None);
         var currentStatus = await db.Tickets.Where(t => t.Id == ticket.Id).Select(t => t.Status).FirstAsync(CancellationToken.None);
         run.SpecSubmitted = specSubmitted;
@@ -365,6 +367,7 @@ public sealed class RunQueue(
         ticket.WorkflowState = refreshedTicket.WorkflowState;
         ticket.Result = refreshedTicket.Result;
         ticket.Slug = refreshedTicket.Slug;
+        ticket.AutoMerge = refreshedTicket.AutoMerge;
 
         var refinement = run.Kind is RunKind.Refine or RunKind.Answer
                          || (run.Kind == RunKind.Resume && currentStatus is not (TicketStatus.InProgress or TicketStatus.Review or TicketStatus.Done));
@@ -381,7 +384,9 @@ public sealed class RunQueue(
             resultIsError,
             newQuestions,
             specSubmitted,
-            RunOutcome.ReadGate(ticket.WorkflowState));
+            RunOutcome.ReadGate(ticket.WorkflowState),
+            shipped,
+            ticket.AutoMerge);
 
         var success = facts.Succeeded;
         run.Status = success ? RunStatus.Done : RunStatus.Failed;
@@ -391,7 +396,25 @@ public sealed class RunQueue(
 
         if (currentStatus != TicketStatus.Failed || run.Status == RunStatus.Done)
         {
-            ticket.Status = RunOutcome.Decide(facts);
+            var decided = RunOutcome.Decide(facts);
+            ticket.Status = decided;
+
+            if (RunOutcome.ShouldAutoShip(facts, decided))
+            {
+                var ship = tickets.QueueShip(ticket);
+                logger.LogInformation("Run {RunId}: gate PASSED with auto-merge on; queued ship run for ticket {TicketId}", run.Id, ticket.Id);
+                ticket.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(CancellationToken.None);
+                bus.PublishRun(await mapper.RunAsync(ship.Id, CancellationToken.None));
+                return;
+            }
+
+            if (run.Kind == RunKind.Ship && decided == TicketStatus.Done)
+            {
+                ticket.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(CancellationToken.None);
+                await tickets.CompleteShippedAsync(ticket, CancellationToken.None);
+            }
         }
 
         ticket.UpdatedAt = DateTime.UtcNow;
@@ -464,7 +487,7 @@ public sealed class RunQueue(
         var extra = new List<string>
         {
             "--max-turns",
-            (run.Kind == RunKind.Work ? cfg.Claude.MaxTurnsWork : cfg.Claude.MaxTurnsRefine).ToString(),
+            (run.Kind is RunKind.Work or RunKind.Ship ? cfg.Claude.MaxTurnsWork : cfg.Claude.MaxTurnsRefine).ToString(),
         };
         if (!string.IsNullOrWhiteSpace(cfg.Claude.Model))
         {

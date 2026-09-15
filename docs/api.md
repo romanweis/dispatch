@@ -7,7 +7,7 @@ No auth for the UI. The in-container `ticket` CLI sends `Authorization: Bearer <
 
 ```
 TicketStatus: backlog | refining | needs_input | ready | in_progress | review | done | failed
-RunKind:      refine | answer | work | resume
+RunKind:      refine | answer | work | resume | ship
 RunStatus:    pending | running | done | failed | cancelled
 CommentAuthor: user | agent | system
 ```
@@ -28,6 +28,7 @@ Ticket {
   id: number; projectId: number; projectName: string;
   title: string; body: string;          // body is markdown
   status: TicketStatus;
+  autoMerge: boolean;                   // passed review gate -> ship run instead of waiting in review
   slug: string | null;                  // set when work starts, kebab-case + 3 char salt
   spec: string | null;                  // markdown, agent-written during refinement
   container: string | null;             // "t-<id>" once created
@@ -56,13 +57,14 @@ TicketDetail = Ticket & { questions: Question[]; comments: Comment[]; runs: Run[
 |---|---|---|---|---|
 | GET | `/api/projects` | | `Project[]` | |
 | GET | `/api/tickets` | `?projectId=&status=` | `Ticket[]` | ordered by updatedAt desc |
-| POST | `/api/tickets` | `{projectId, title, body}` | `Ticket` 201 | status `backlog` |
+| POST | `/api/tickets` | `{projectId, title, body, autoMerge?}` | `Ticket` 201 | status `backlog` |
 | GET | `/api/tickets/{id}` | | `TicketDetail` | |
-| PATCH | `/api/tickets/{id}` | `{title?, body?, spec?}` | `Ticket` | spec editable only in `ready`/`needs_input`/`backlog` |
+| PATCH | `/api/tickets/{id}` | `{title?, body?, spec?, autoMerge?}` | `Ticket` | spec editable only in `ready`/`needs_input`/`backlog`; `autoMerge` any time |
 | DELETE | `/api/tickets/{id}` | | 204 | deletes container too |
 | POST | `/api/tickets/{id}/refine` | | `Run` 202 | allowed from `backlog`, `needs_input` (when no unanswered questions), `failed` |
 | POST | `/api/tickets/{id}/answer` | `{answers: [{questionId, answer}]}` | `Run` 202 | stores answers, then queues run kind `answer` (resume) |
 | POST | `/api/tickets/{id}/start` | | `Run` 202 | from `ready`; needs `spec`; sets slug, writes feature file, runs work |
+| POST | `/api/tickets/{id}/ship` | | `Run` 202 | from `review` with `workflowState.gate == PASSED`; queues run kind `ship` (`/ship-feature`), ticket -> `in_progress` |
 | POST | `/api/tickets/{id}/resume` | `{message}` | `Run` 202 | free-form message into the existing session, from any non-running state with a session |
 | POST | `/api/tickets/{id}/cancel` | | `Run` | kills the active run, ticket -> `failed` |
 | POST | `/api/tickets/{id}/done` | `{snapshot?: boolean}` | `Ticket` | from `review`/`in_progress`/`failed`; deletes container |
@@ -89,6 +91,8 @@ Errors: `{ error: string, code: string }` with 400 (invalid transition: code `in
 | POST | `/api/tickets/{id}/progress` | `{phase: string, note?: string}` | 204 | free-form progress note shown on the card |
 
 The run outcome is decided when the claude process exits: if the run recorded new questions -> `needs_input`; else if it recorded a spec (refine/answer) -> `ready`; else for `work` runs the ticket stays `in_progress` unless `workflowState.gate == "PASSED"` -> `review`; non-zero exit or missing result -> `failed`.
+
+Auto-merge: when a run would land in `review` and the ticket has `autoMerge == true`, Dispatch instead queues a run of kind `ship` and keeps the ticket `in_progress`. A `ship` run (also started by `POST .../ship`) ends as: questions -> `needs_input`; a `ticket progress shipped` note during the run -> `done` (container deleted, no snapshot); any other clean exit (halted, rolled back) -> `review` for the human; error -> `failed`. Auto-merge never re-triggers itself after a ship run.
 
 ## Environment inside a ticket container
 

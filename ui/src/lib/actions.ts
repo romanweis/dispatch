@@ -1,5 +1,9 @@
 import type { Ticket } from "./types";
 
+export function gatePassed(t: Ticket): boolean {
+  return typeof t.workflowState?.gate === "string" && t.workflowState.gate.toUpperCase() === "PASSED";
+}
+
 /** Which actions the current ticket state allows (mirrors docs/api.md transition rules). */
 export function allowedActions(t: Ticket) {
   const running = t.activeRunId !== null;
@@ -9,6 +13,7 @@ export function allowedActions(t: Ticket) {
     start: !running && t.status === "ready",
     startNeedsSpec: t.status === "ready" && !t.spec,
     resume: !running && !!t.claudeSessionId && t.status !== "done",
+    ship: !running && t.status === "review" && gatePassed(t),
     cancel: running,
     done: !running && (t.status === "review" || t.status === "in_progress" || t.status === "failed"),
     refresh: t.container !== null,

@@ -7,7 +7,7 @@ Ship feature `$1` to production. This merges PRs, and merging to `main` deploys.
 
 ## Before you run anything
 
-0. Confirm the human asked for this. The only valid trigger is a resume message from the Dispatch board telling you to ship this ticket. If you are here because a previous command chained into it, or because the gate passed and it seemed like the next step, stop. Nothing chains into `/ship-feature`.
+0. Confirm Dispatch asked for this. The only valid trigger is a ship run from the Dispatch board: a prompt that says Dispatch is asking you to ship this ticket (the human either pressed Ship or enabled auto-merge on the ticket). If you are here because a previous command chained into it, or because the gate passed and it seemed like the next step, stop. Nothing chains into `/ship-feature`.
 1. Read `tasks/$1/state.json`. If `gate` is not `PASSED`, stop and say so. A fleet ships through `/review-feature` or not at all.
 2. If `frozen` is true, or a `FREEZE` file exists in this repo, stop and `ticket comment` why.
 3. If the fleet includes a backend slice, `PROBE_HOSTS` is set in `workflow.env`, and `tasks/$1/probe.json` is missing, write it now (see `/review-feature`). The script will refuse without it, and it is right to.
@@ -43,4 +43,4 @@ One exception the script raises on its own: `PROBE_INCONCLUSIVE` means productio
 
 ## When it finishes
 
-Read the final state from GitHub, not from `state.json` (the session can die between a merge landing and the state commit). Then print, one line per slice: repo, merge commit, deploy conclusion, probe result. `ticket progress shipped "<repos>"`, and say plainly that the feature is live.
+Read the final state from GitHub, not from `state.json` (the session can die between a merge landing and the state commit). Then print, one line per slice: repo, merge commit, deploy conclusion, probe result. `ticket progress shipped "<repos>"`, and say plainly that the feature is live. That `shipped` note is what moves the ticket to Done on the board and deletes this container, so post it only when every slice is merged and its deploy is green.

@@ -14,12 +14,14 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
   const [projectId, setProjectId] = useState<number | "">("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [autoMerge, setAutoMerge] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
       setTitle("");
       setBody("");
+      setAutoMerge(false);
       setBusy(false);
       setProjectId((cur) => (cur === "" && projects.length > 0 ? projects[0].id : cur));
     }
@@ -32,7 +34,7 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
     if (!canSubmit) return;
     setBusy(true);
     try {
-      const ticket = await api.tickets.create({ projectId: Number(projectId), title: title.trim(), body });
+      const ticket = await api.tickets.create({ projectId: Number(projectId), title: title.trim(), body, autoMerge });
       applyTicket(ticket);
       onClose();
       navigate(`/tickets/${ticket.id}`);
@@ -88,6 +90,12 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
             className="font-mono text-[12px]"
           />
         </div>
+        <label className="flex items-center gap-2 text-[12.5px]">
+          <input type="checkbox" checked={autoMerge} onChange={(e) => setAutoMerge(e.target.checked)} className="accent-accent" />
+          <span>
+            Auto-merge <span className="text-fg-muted">(ship to production as soon as the review gate passes, without waiting in Review)</span>
+          </span>
+        </label>
       </form>
     </Dialog>
   );

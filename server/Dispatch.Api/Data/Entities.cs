@@ -20,6 +20,7 @@ public enum RunKind
     Answer,
     Work,
     Resume,
+    Ship,
 }
 
 public enum RunStatus
@@ -64,6 +65,9 @@ public sealed class Ticket
     public TicketStatus Status { get; set; } = TicketStatus.Backlog;
     public string? Slug { get; set; }
     public string? Spec { get; set; }
+
+    /// <summary>When true, a passed review gate queues a ship run (/ship-feature) instead of parking the ticket in review.</summary>
+    public bool AutoMerge { get; set; }
     public string? Container { get; set; }
     public string? ClaudeSessionId { get; set; }
     public JsonDocument? WorkflowState { get; set; }

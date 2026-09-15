@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Box, Check, Loader2, Pencil, X } from "lucide-react";
+import { Box, Check, GitMerge, Loader2, Pencil, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { STATUS_LABEL, type TicketDetail } from "@/lib/types";
 import { relativeTime } from "@/lib/utils";
@@ -14,6 +14,18 @@ export function TicketHeader({ ticket }: { ticket: TicketDetail }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(ticket.title);
   const [saving, setSaving] = useState(false);
+  const [toggling, setToggling] = useState(false);
+
+  const toggleAutoMerge = async () => {
+    setToggling(true);
+    try {
+      applyTicket(await api.tickets.patch(ticket.id, { autoMerge: !ticket.autoMerge }));
+    } catch (err) {
+      toastError(err, "Auto-merge");
+    } finally {
+      setToggling(false);
+    }
+  };
 
   useEffect(() => {
     if (!editing) setDraft(ticket.title);
@@ -51,6 +63,19 @@ export function TicketHeader({ ticket }: { ticket: TicketDetail }) {
             <Loader2 size={10} className="animate-spin" /> run #{ticket.activeRunId}
           </Badge>
         )}
+        <button
+          type="button"
+          onClick={() => void toggleAutoMerge()}
+          disabled={toggling || ticket.status === "done"}
+          title={ticket.autoMerge ? "Auto-merge on: a passed review gate ships the feature without waiting. Click to turn off." : "Auto-merge off: the ticket waits in Review until you press Ship. Click to turn on."}
+          aria-pressed={ticket.autoMerge}
+          className={
+            "inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[11px] font-medium transition-colors disabled:opacity-60 " +
+            (ticket.autoMerge ? "border-ok/50 bg-ok-soft text-ok" : "border-line text-fg-muted hover:border-line-strong hover:text-fg")
+          }
+        >
+          {toggling ? <Loader2 size={10} className="animate-spin" /> : <GitMerge size={10} />} auto-merge {ticket.autoMerge ? "on" : "off"}
+        </button>
         {ticket.slug && <span className="font-mono text-fg-faint">{ticket.slug}</span>}
         <span className="ml-auto text-fg-faint" title={ticket.updatedAt}>
           updated {relativeTime(ticket.updatedAt)}

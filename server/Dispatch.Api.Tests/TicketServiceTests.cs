@@ -293,6 +293,53 @@ public sealed class TicketServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Ship_requires_review_with_passed_gate_and_queues_ship_run()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        await _host.SetAsync(ticket.Id, t =>
+        {
+            t.Status = TicketStatus.Review;
+            t.Slug = "add-login-page-abc";
+            t.ClaudeSessionId = "sess";
+            t.WorkflowState = System.Text.Json.JsonDocument.Parse("{\"gate\":\"RUNNING\"}");
+        });
+
+        using (var scope = _host.Scope())
+        {
+            var ex = await Assert.ThrowsAsync<DispatchException>(() => _host.Tickets(scope).ShipAsync(ticket.Id));
+            Assert.Equal("invalid_transition", ex.Code);
+        }
+
+        await _host.SetAsync(ticket.Id, t => t.WorkflowState = System.Text.Json.JsonDocument.Parse("{\"gate\":\"PASSED\"}"));
+
+        using var scope2 = _host.Scope();
+        var run = await _host.Tickets(scope2).ShipAsync(ticket.Id);
+
+        Assert.Equal(RunKind.Ship, run.Kind);
+        Assert.Contains($"/ship-feature {ticket.Id}", run.Prompt);
+        Assert.Equal(TicketStatus.InProgress, (await _host.ReloadAsync(ticket.Id)).Status);
+
+        var ex2 = await Assert.ThrowsAsync<DispatchException>(() => _host.Tickets(scope2).ShipAsync(ticket.Id));
+        Assert.Equal("run_active", ex2.Code);
+    }
+
+    [Fact]
+    public async Task Patch_toggles_auto_merge_and_create_accepts_it()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        Assert.False(ticket.AutoMerge);
+
+        using var scope = _host.Scope();
+        var tickets = _host.Tickets(scope);
+        var patched = await tickets.PatchAsync(ticket.Id, null, null, null, autoMerge: true);
+        Assert.True(patched.AutoMerge);
+        Assert.True((await _host.ReloadAsync(ticket.Id)).AutoMerge);
+
+        var created = await tickets.CreateAsync(_host.ProjectId, "auto", null, autoMerge: true);
+        Assert.True(created.AutoMerge);
+    }
+
+    [Fact]
     public async Task Done_from_backlog_is_invalid()
     {
         var ticket = await _host.CreateTicketAsync();

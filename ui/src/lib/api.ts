@@ -95,17 +95,18 @@ export const api = {
   tickets: {
     list: (filter: { projectId?: number; status?: TicketStatus } = {}, signal?: AbortSignal) =>
       request<Ticket[]>("GET", `/api/tickets${qs(filter)}`, undefined, signal),
-    create: (input: { projectId: number; title: string; body: string }) =>
+    create: (input: { projectId: number; title: string; body: string; autoMerge?: boolean }) =>
       request<Ticket>("POST", "/api/tickets", input),
     get: (id: number, signal?: AbortSignal) =>
       request<TicketDetail>("GET", `/api/tickets/${id}`, undefined, signal),
-    patch: (id: number, patch: { title?: string; body?: string; spec?: string }) =>
+    patch: (id: number, patch: { title?: string; body?: string; spec?: string; autoMerge?: boolean }) =>
       request<Ticket>("PATCH", `/api/tickets/${id}`, patch),
     delete: (id: number) => request<void>("DELETE", `/api/tickets/${id}`),
     refine: (id: number) => request<Run>("POST", `/api/tickets/${id}/refine`),
     answer: (id: number, answers: { questionId: number; answer: string }[]) =>
       request<Run>("POST", `/api/tickets/${id}/answer`, { answers }),
     start: (id: number) => request<Run>("POST", `/api/tickets/${id}/start`),
+    ship: (id: number) => request<Run>("POST", `/api/tickets/${id}/ship`),
     resume: (id: number, message: string) => request<Run>("POST", `/api/tickets/${id}/resume`, { message }),
     cancel: (id: number) => request<Run>("POST", `/api/tickets/${id}/cancel`),
     done: (id: number, snapshot?: boolean) =>

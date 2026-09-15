@@ -1,7 +1,7 @@
 import { memo, type CSSProperties } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CircleHelp, GitPullRequest, Loader2 } from "lucide-react";
+import { CircleHelp, GitMerge, GitPullRequest, Loader2 } from "lucide-react";
 import { Link } from "react-router";
 import type { Ticket } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,7 @@ export const TicketCard = memo(function TicketCard({ ticket, active, overlay }: 
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[11px] text-fg-faint">#{ticket.id}</span>
         <div className="flex items-center gap-1.5">
+          {ticket.autoMerge && <GitMerge size={12} className="text-ok" aria-label="Auto-merge on" />}
           {running && <Loader2 size={12} className="animate-spin text-info" aria-label="Run active" />}
           <Badge tone="neutral" className="max-w-[120px] truncate" title={ticket.projectName}>
             {ticket.projectName}

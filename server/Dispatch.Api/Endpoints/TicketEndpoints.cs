@@ -30,7 +30,7 @@ public static class TicketEndpoints
 
         group.MapPost("", async (CreateTicketRequest body, TicketService tickets, DtoMapper mapper, CancellationToken ct) =>
         {
-            var ticket = await tickets.CreateAsync(body.ProjectId, body.Title, body.Body, ct);
+            var ticket = await tickets.CreateAsync(body.ProjectId, body.Title, body.Body, body.AutoMerge ?? false, ct);
             return Results.Created($"/api/tickets/{ticket.Id}", await mapper.TicketAsync(ticket.Id, ct));
         });
 
@@ -43,7 +43,7 @@ public static class TicketEndpoints
 
         group.MapPatch("/{id:long}", async (long id, PatchTicketRequest body, TicketService tickets, DtoMapper mapper, CancellationToken ct) =>
         {
-            await tickets.PatchAsync(id, body.Title, body.Body, body.Spec, ct);
+            await tickets.PatchAsync(id, body.Title, body.Body, body.Spec, body.AutoMerge, ct);
             return Results.Ok(await mapper.TicketAsync(id, ct));
         });
 
@@ -68,6 +68,12 @@ public static class TicketEndpoints
         group.MapPost("/{id:long}/start", async (long id, TicketService tickets, DtoMapper mapper, CancellationToken ct) =>
         {
             var run = await tickets.StartAsync(id, ct);
+            return Results.Accepted($"/api/runs/{run.Id}", await mapper.RunAsync(run.Id, ct));
+        });
+
+        group.MapPost("/{id:long}/ship", async (long id, TicketService tickets, DtoMapper mapper, CancellationToken ct) =>
+        {
+            var run = await tickets.ShipAsync(id, ct);
             return Results.Accepted($"/api/runs/{run.Id}", await mapper.RunAsync(run.Id, ct));
         });
 

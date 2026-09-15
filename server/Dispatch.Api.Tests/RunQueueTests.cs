@@ -130,6 +130,104 @@ public sealed class RunQueueTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Work_run_with_auto_merge_queues_ship_run_instead_of_review()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        await _host.SetAsync(ticket.Id, t =>
+        {
+            t.Status = TicketStatus.Ready;
+            t.Spec = "spec";
+            t.AutoMerge = true;
+        });
+        long runId;
+        using (var scope = _host.Scope())
+        {
+            runId = (await _host.Tickets(scope).StartAsync(ticket.Id)).Id;
+        }
+
+        _host.Incus.SetFile($"t-{ticket.Id}", $"/home/agent/demo/orchestrator/tasks/{ticket.Id}/state.json", "{\"gate\":\"PASSED\"}");
+
+        await MarkRunningAsync(runId);
+        await _host.Queue.ExecuteRunAsync(runId, CancellationToken.None);
+
+        var reloaded = await _host.ReloadAsync(ticket.Id);
+        Assert.Equal(TicketStatus.InProgress, reloaded.Status);
+
+        using var verify = _host.Scope();
+        var runs = await _host.Db(verify).Runs.AsNoTracking().Where(r => r.TicketId == ticket.Id).OrderBy(r => r.Id).ToListAsync();
+        Assert.Equal(2, runs.Count);
+        Assert.Equal(RunStatus.Done, runs[0].Status);
+        Assert.Equal(RunKind.Ship, runs[1].Kind);
+        Assert.Equal(RunStatus.Pending, runs[1].Status);
+        Assert.Contains($"/ship-feature {ticket.Id}", runs[1].Prompt);
+    }
+
+    [Fact]
+    public async Task Ship_run_with_shipped_progress_closes_ticket_and_deletes_container()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        await _host.SetAsync(ticket.Id, t =>
+        {
+            t.Status = TicketStatus.Review;
+            t.Slug = "s";
+            t.ClaudeSessionId = "sess";
+            t.WorkflowState = System.Text.Json.JsonDocument.Parse("{\"gate\":\"PASSED\"}");
+        });
+        long runId;
+        using (var scope = _host.Scope())
+        {
+            var tickets = _host.Tickets(scope);
+            runId = (await tickets.ShipAsync(ticket.Id)).Id;
+            await tickets.AddProgressAsync(ticket.Id, "shipping", null);
+            await tickets.AddProgressAsync(ticket.Id, "shipped", "backend academy");
+        }
+
+        _host.Incus.SetFile($"t-{ticket.Id}", $"/home/agent/demo/orchestrator/tasks/{ticket.Id}/state.json", "{\"gate\":\"PASSED\",\"phase\":\"shipped\"}");
+
+        await MarkRunningAsync(runId);
+        await _host.Queue.ExecuteRunAsync(runId, CancellationToken.None);
+
+        var reloaded = await _host.ReloadAsync(ticket.Id);
+        Assert.Equal(TicketStatus.Done, reloaded.Status);
+        Assert.Null(reloaded.Container);
+        Assert.Contains($"delete t-{ticket.Id}", _host.Incus.Calls);
+    }
+
+    [Fact]
+    public async Task Ship_run_that_halts_returns_to_review()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        await _host.SetAsync(ticket.Id, t =>
+        {
+            t.Status = TicketStatus.Review;
+            t.Slug = "s";
+            t.ClaudeSessionId = "sess";
+            t.AutoMerge = true;
+            t.WorkflowState = System.Text.Json.JsonDocument.Parse("{\"gate\":\"PASSED\"}");
+        });
+        long runId;
+        using (var scope = _host.Scope())
+        {
+            var tickets = _host.Tickets(scope);
+            runId = (await tickets.ShipAsync(ticket.Id)).Id;
+            await tickets.AddProgressAsync(ticket.Id, "halted", "PROBE_INCONCLUSIVE");
+        }
+
+        _host.Incus.SetFile($"t-{ticket.Id}", $"/home/agent/demo/orchestrator/tasks/{ticket.Id}/state.json", "{\"gate\":\"PASSED\"}");
+
+        await MarkRunningAsync(runId);
+        await _host.Queue.ExecuteRunAsync(runId, CancellationToken.None);
+
+        var reloaded = await _host.ReloadAsync(ticket.Id);
+        Assert.Equal(TicketStatus.Review, reloaded.Status);
+        Assert.NotNull(reloaded.Container);
+
+        // No second ship run is queued: auto-merge never re-triggers itself.
+        using var verify = _host.Scope();
+        Assert.Equal(1, await _host.Db(verify).Runs.CountAsync(r => r.TicketId == ticket.Id));
+    }
+
+    [Fact]
     public void Session_options_follow_project_claude_config()
     {
         var ticket = new Ticket { Id = 5, Title = "t", Token = "x", ClaudeSessionId = "sess-5", ProjectId = _host.ProjectId };

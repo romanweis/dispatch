@@ -15,8 +15,46 @@ public sealed class RunOutcomeTests
         bool resultIsError = false,
         bool questions = false,
         bool spec = false,
-        string? gate = null) =>
-        new(kind, current, exitCode, resultSeen, resultIsError, questions, spec, gate);
+        string? gate = null,
+        bool shipped = false,
+        bool autoMerge = false) =>
+        new(kind, current, exitCode, resultSeen, resultIsError, questions, spec, gate, shipped, autoMerge);
+
+    [Fact]
+    public void Ship_run_with_shipped_progress_leads_to_done()
+    {
+        Assert.Equal(TicketStatus.Done, RunOutcome.Decide(Facts(RunKind.Ship, TicketStatus.InProgress, gate: "PASSED", shipped: true)));
+    }
+
+    [Fact]
+    public void Ship_run_without_shipped_progress_goes_back_to_review()
+    {
+        Assert.Equal(TicketStatus.Review, RunOutcome.Decide(Facts(RunKind.Ship, TicketStatus.InProgress, gate: "PASSED")));
+    }
+
+    [Fact]
+    public void Ship_run_questions_and_failures_follow_the_usual_rules()
+    {
+        Assert.Equal(TicketStatus.NeedsInput, RunOutcome.Decide(Facts(RunKind.Ship, TicketStatus.InProgress, questions: true)));
+        Assert.Equal(TicketStatus.Failed, RunOutcome.Decide(Facts(RunKind.Ship, TicketStatus.InProgress, exitCode: 1)));
+        Assert.Equal(TicketStatus.Failed, RunOutcome.Decide(Facts(RunKind.Ship, TicketStatus.InProgress, resultIsError: true, shipped: true)));
+    }
+
+    [Fact]
+    public void Auto_merge_ships_only_when_a_non_ship_run_reaches_review()
+    {
+        var passed = Facts(RunKind.Work, TicketStatus.InProgress, gate: "PASSED", autoMerge: true);
+        Assert.True(RunOutcome.ShouldAutoShip(passed, RunOutcome.Decide(passed)));
+
+        var off = Facts(RunKind.Work, TicketStatus.InProgress, gate: "PASSED");
+        Assert.False(RunOutcome.ShouldAutoShip(off, RunOutcome.Decide(off)));
+
+        var notPassed = Facts(RunKind.Work, TicketStatus.InProgress, autoMerge: true);
+        Assert.False(RunOutcome.ShouldAutoShip(notPassed, RunOutcome.Decide(notPassed)));
+
+        var shipBackToReview = Facts(RunKind.Ship, TicketStatus.InProgress, gate: "PASSED", autoMerge: true);
+        Assert.False(RunOutcome.ShouldAutoShip(shipBackToReview, RunOutcome.Decide(shipBackToReview)));
+    }
 
     [Theory]
     [InlineData(RunKind.Refine, TicketStatus.Refining)]

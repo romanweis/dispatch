@@ -8,4 +8,4 @@ Report progress on the board with `ticket progress <phase> [note]` at least at: 
 
 If you are blocked, if a repo cannot be fast-forwarded, or if the decomposition looks wrong, run `ticket ask "<precise question with your default assumption>"` and stop the turn. Do not compensate in code and do not guess.
 
-Never run `/ship-feature`. When the review gate passes, post `ticket progress ready-to-ship` and stop; the human decides on the board and will resume this session if they want it shipped.
+Never run `/ship-feature` from this run. When the review gate passes, post `ticket progress ready-to-ship` and stop; Dispatch decides what happens next (the human presses Ship, or auto-merge is on for this ticket) and sends a separate ship prompt into this session.

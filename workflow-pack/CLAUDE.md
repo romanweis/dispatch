@@ -34,7 +34,7 @@ The `ticket` CLI (`/usr/local/bin/ticket`) is the only channel. `ticket --help` 
 
 Implement the fleet, get CI green. Then review it with sub-agents, fix what they find, and repeat until no BLOCKER or MAJOR remains. Then merge, which deploys to production.
 
-Three commands, not one, because their blast radii differ and only the last is irreversible. `/start-feature` chains into `/review-feature`. **Nothing ever chains into `/ship-feature`.** It is triggered by the human: after the ticket reaches `review` on the board they send a resume message telling you to run `/ship-feature <id>`. Until that message arrives, a `PASSED` gate means "ready", not "go".
+Three commands, not one, because their blast radii differ and only the last is irreversible. `/start-feature` chains into `/review-feature`. **Nothing ever chains into `/ship-feature`.** It is triggered by Dispatch in a separate ship run whose prompt says so, either because the human pressed Ship on the board or because they enabled auto-merge on the ticket before the gate passed. Until that prompt arrives, a `PASSED` gate means "ready", not "go". You cannot see the auto-merge flag from here except via `ticket show`; it changes nothing about what you do.
 
 ## What you are actually trusted with
 
@@ -106,7 +106,7 @@ The review loop. Full contract in `.claude/commands/review-feature.md`; the rubr
 
 `tests` and `conventions` are capped at MINOR by the rubric. They can find something on any diff forever, and if they could block, the cap would become the normal exit and the loop would never converge.
 
-Dispatch moves the ticket to `review` on the board when `state.json.gate` is `PASSED`. The human looks at it there and decides whether to ship.
+Dispatch moves the ticket to `review` on the board when `state.json.gate` is `PASSED`. The human looks at it there and decides whether to ship. If the ticket has auto-merge on, Dispatch skips that wait and starts the ship run itself.
 
 ## /ship-feature <id>
 
@@ -153,7 +153,7 @@ Every item below ends with `ticket ask` or `ticket comment` and a stopped turn. 
 
 - Do not merge a PR by hand. `scripts/merge-fleet.sh` merges, or nothing does.
 - Do not hotfix production. Revert.
-- Do not run `/ship-feature` unless the human asked for it in this ticket.
+- Do not run `/ship-feature` unless a Dispatch ship run asked for it in this ticket.
 - Do not edit `workflow.env`, `repos.yaml`, or anything under `scripts/` from a ticket session.
 - Do not add skills, commands, or subagents without asking the human first.
 - Do not invent schema. Pull it from the running local API when a slice needs it.

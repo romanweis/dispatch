@@ -40,8 +40,21 @@ public sealed class ClaudeConfig
     public int MaxTurnsWork { get; set; } = 400;
 }
 
-public sealed record ProjectPrompts(string Refine, string Work, string Answer)
+public sealed record ProjectPrompts(string Refine, string Work, string Answer, string Ship = ProjectPrompts.DefaultShip)
 {
+    public const string DefaultShip =
+        """
+        Dispatch is asking you to ship ticket #{{ticket.id}} "{{ticket.title}}" (feature {{ticket.id}}, slug {{ticket.slug}}).
+        The review gate for this feature is PASSED and the human has authorised the merge for this ticket on the board.
+
+        cd into `{{project.workspace}}/orchestrator` and run `/ship-feature {{ticket.id}}` exactly as that repo's `CLAUDE.md` describes:
+        dry run first, then the real merge, and never a manual fix if it halts.
+
+        Report with `ticket progress shipping`, and when every slice is merged and live, `ticket progress shipped "<repos>"`.
+        If the ship halts or rolls back, post `ticket progress halted|rolled-back "<reason>"`, `ticket comment` the incident, and stop.
+        If you need a decision from the human, use `ticket ask` and stop.
+        """;
+
     public const string DefaultRefine =
         """
         You are refining ticket #{{ticket.id}} for project {{project.name}} (workspace {{project.workspace}}).

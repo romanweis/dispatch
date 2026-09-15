@@ -78,6 +78,7 @@ cmd_show() {
     "Ticket #\(.id)  [\(.status)]  project: \(.projectName)",
     "Title:  \(.title)",
     (if .slug then "Slug:   \(.slug)" else empty end),
+    "Auto-merge: \(if .autoMerge then "on (Dispatch queues a ship run when the review gate passes)" else "off (waits in review for the human)" end)",
     "",
     "Body:", sep, (.body // "(empty)"), sep,
     "",

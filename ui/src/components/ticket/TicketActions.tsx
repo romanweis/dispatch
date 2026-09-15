@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { CheckCheck, MessageSquareReply, Play, RefreshCw, Sparkles, Square, Trash2 } from "lucide-react";
+import { CheckCheck, GitMerge, MessageSquareReply, Play, RefreshCw, Sparkles, Square, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Run, Ticket, TicketDetail } from "@/lib/types";
 import { useBoardStore } from "@/store/board";
@@ -29,6 +29,7 @@ export function TicketActions({ ticket, onAnswer, answerReady }: Props) {
   const [doneOpen, setDoneOpen] = useState(false);
   const [snapshot, setSnapshot] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [shipOpen, setShipOpen] = useState(false);
   const can = allowedActions(ticket);
 
   const runAction = async (name: string, fn: () => Promise<Run | Ticket | void>, after?: (r: Run | Ticket | void) => void) => {
@@ -92,6 +93,11 @@ export function TicketActions({ ticket, onAnswer, answerReady }: Props) {
             Cancel
           </Button>
         )}
+        {can.ship && (
+          <Button variant="primary" icon={<GitMerge size={13} />} onClick={() => setShipOpen(true)}>
+            Ship
+          </Button>
+        )}
         {can.done && (
           <Button icon={<CheckCheck size={13} />} onClick={() => setDoneOpen(true)}>
             Done
@@ -148,6 +154,40 @@ export function TicketActions({ ticket, onAnswer, answerReady }: Props) {
           Free-form message into the existing Claude session <span className="font-mono">{ticket.claudeSessionId}</span>.
         </p>
         <Textarea autoFocus rows={6} value={resumeMsg} onChange={(e) => setResumeMsg(e.target.value)} placeholder="e.g. CI is red on slice 2, please fix the lint errors and re-run the gate." />
+      </Dialog>
+
+      <Dialog
+        open={shipOpen}
+        onClose={() => setShipOpen(false)}
+        title={`Ship #${ticket.id}`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShipOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              icon={<GitMerge size={13} />}
+              loading={busy === "Ship"}
+              onClick={() =>
+                runAction(
+                  "Ship",
+                  () => api.tickets.ship(ticket.id),
+                  (r) => {
+                    onRun(r);
+                    setShipOpen(false);
+                  },
+                )
+              }
+            >
+              Merge and deploy
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[12.5px] text-fg-muted">
+          Queues a ship run: the agent runs <span className="font-mono text-fg">/ship-feature {ticket.id}</span>, which merges every PR of this feature tier by tier and waits for each deploy. Merging to main deploys to production and cannot be undone from here. When the agent reports <span className="font-mono text-fg">shipped</span> the ticket moves to Done and its container is deleted.
+        </p>
       </Dialog>
 
       <Dialog

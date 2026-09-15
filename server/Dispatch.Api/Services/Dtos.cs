@@ -23,6 +23,7 @@ public record TicketDto(
     string Title,
     string Body,
     TicketStatus Status,
+    bool AutoMerge,
     string? Slug,
     string? Spec,
     string? Container,
@@ -84,9 +85,9 @@ public sealed record ErrorDto(string Error, string Code);
 
 // ---- request bodies -------------------------------------------------------
 
-public sealed record CreateTicketRequest(int ProjectId, string Title, string? Body);
+public sealed record CreateTicketRequest(int ProjectId, string Title, string? Body, bool? AutoMerge);
 
-public sealed record PatchTicketRequest(string? Title, string? Body, string? Spec);
+public sealed record PatchTicketRequest(string? Title, string? Body, string? Spec, bool? AutoMerge);
 
 public sealed record AnswerItem(long QuestionId, string Answer);
 

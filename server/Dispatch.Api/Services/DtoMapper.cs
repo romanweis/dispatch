@@ -96,6 +96,7 @@ public sealed class DtoMapper(DispatchDbContext db, IIncusService incus, IProjec
                 t.Title,
                 t.Body,
                 t.Status,
+                t.AutoMerge,
                 t.Slug,
                 t.Spec,
                 t.Container,

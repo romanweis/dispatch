@@ -32,7 +32,7 @@ export const STATUS_LABEL: Record<TicketStatus, string> = {
   failed: "Failed",
 };
 
-export type RunKind = "refine" | "answer" | "work" | "resume";
+export type RunKind = "refine" | "answer" | "work" | "resume" | "ship";
 export type RunStatus = "pending" | "running" | "done" | "failed" | "cancelled";
 export type CommentAuthor = "user" | "agent" | "system";
 export type ContainerState = "none" | "running" | "stopped" | "missing";
@@ -105,6 +105,8 @@ export interface Ticket {
   /** markdown */
   body: string;
   status: TicketStatus;
+  /** when true a passed review gate queues a ship run (/ship-feature) instead of waiting in review */
+  autoMerge: boolean;
   slug: string | null;
   /** markdown, agent-written during refinement */
   spec: string | null;

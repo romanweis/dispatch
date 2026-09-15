@@ -22,7 +22,7 @@ public sealed class TicketService(
 
     // ---- CRUD ---------------------------------------------------------------
 
-    public async Task<Ticket> CreateAsync(int projectId, string title, string? body, CancellationToken ct = default)
+    public async Task<Ticket> CreateAsync(int projectId, string title, string? body, bool autoMerge = false, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
@@ -41,6 +41,7 @@ public sealed class TicketService(
             ProjectId = projectId,
             Title = title.Trim(),
             Body = body ?? "",
+            AutoMerge = autoMerge,
             Status = TicketStatus.Backlog,
             Token = SlugGenerator.NewToken(),
             CreatedAt = now,
@@ -52,7 +53,7 @@ public sealed class TicketService(
         return ticket;
     }
 
-    public async Task<Ticket> PatchAsync(long id, string? title, string? body, string? spec, CancellationToken ct = default)
+    public async Task<Ticket> PatchAsync(long id, string? title, string? body, string? spec, bool? autoMerge = null, CancellationToken ct = default)
     {
         var ticket = await LoadAsync(id, ct);
         if (title is not null)
@@ -79,6 +80,11 @@ public sealed class TicketService(
             }
 
             ticket.Spec = spec;
+        }
+
+        if (autoMerge is { } am)
+        {
+            ticket.AutoMerge = am;
         }
 
         await TouchAndSaveAsync(ticket, ct);
@@ -239,6 +245,58 @@ public sealed class TicketService(
         return run;
     }
 
+    /// <summary>Human-triggered ship: only from review with a PASSED gate.</summary>
+    public async Task<Run> ShipAsync(long id, CancellationToken ct = default)
+    {
+        var ticket = await LoadAsync(id, ct);
+        await EnsureNoActiveRunAsync(ticket, ct);
+        if (ticket.Status != TicketStatus.Review)
+        {
+            throw DispatchException.InvalidTransition($"cannot ship from {EnumNames.ToWire(ticket.Status)}; ticket must be review");
+        }
+
+        if (!string.Equals(RunOutcome.ReadGate(ticket.WorkflowState), "PASSED", StringComparison.OrdinalIgnoreCase))
+        {
+            throw DispatchException.InvalidTransition("review gate is not PASSED");
+        }
+
+        var run = QueueShip(ticket);
+        await TouchAndSaveAsync(ticket, ct);
+        await PublishRunAsync(run.Id, ct);
+        return run;
+    }
+
+    /// <summary>Queues a ship run and moves the ticket to in_progress. Does not save; callers own the unit of work.</summary>
+    public Run QueueShip(Ticket ticket)
+    {
+        var project = registry.Require(ticket.ProjectId);
+        var prompt = PromptRenderer.Render(project.Prompts.Ship, ticket, project.Config);
+        ticket.Status = TicketStatus.InProgress;
+        return Enqueue(ticket, RunKind.Ship, prompt);
+    }
+
+    /// <summary>After a successful ship run: drop the container and close the ticket. Does not save.</summary>
+    public async Task CompleteShippedAsync(Ticket ticket, CancellationToken ct = default)
+    {
+        var container = ticket.Container ?? ticket.ContainerName;
+        try
+        {
+            var state = await incus.GetStateAsync(container, ct);
+            if (state is ContainerState.Running or ContainerState.Stopped)
+            {
+                await incus.DeleteAsync(container, snapshot: false, ct);
+            }
+
+            ticket.Container = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Ticket {TicketId} shipped but container {Container} could not be deleted", ticket.Id, container);
+        }
+
+        ticket.Status = TicketStatus.Done;
+    }
+
     public async Task<Run> ResumeAsync(long id, string? message, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -353,8 +411,10 @@ public sealed class TicketService(
             ticket.Result = resultDoc;
         }
 
+        // Manual refresh only: while a run is active (including a ship run) the queue decides the status when it ends.
         if (ticket.Status == TicketStatus.InProgress
-            && string.Equals(RunOutcome.ReadGate(ticket.WorkflowState), "PASSED", StringComparison.OrdinalIgnoreCase))
+            && string.Equals(RunOutcome.ReadGate(ticket.WorkflowState), "PASSED", StringComparison.OrdinalIgnoreCase)
+            && await ActiveRunAsync(ticket.Id, ct) is null)
         {
             ticket.Status = TicketStatus.Review;
         }

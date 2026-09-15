@@ -8,7 +8,8 @@ projects/<name>/
   CLAUDE.md          # workspace-level rules, placed at <workspace>/CLAUDE.md in the base container
   prompts/refine.md  # refinement prompt template
   prompts/work.md    # hand-over prompt template
-  prompts/answer.md  # optional; default: "The user answered your questions:\n{{answers}}\n..." 
+  prompts/answer.md  # optional; default: "The user answered your questions:\n{{answers}}\n..."
+  prompts/ship.md    # optional; default asks the agent to run /ship-feature {{ticket.id}} and report `shipped` 
   provision.sh       # runs as root inside the fresh base container, after repos are cloned (optional)
   provision-user.sh  # runs as uid 1000 inside the base container after provision.sh (optional)
 ```
