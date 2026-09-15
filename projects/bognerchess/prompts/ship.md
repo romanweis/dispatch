@@ -1,6 +1,6 @@
 Dispatch is asking you to ship ticket {{ticket.id}} "{{ticket.title}}" (feature {{ticket.id}}, slug `{{ticket.slug}}`). The review gate is PASSED and the human authorised the merge for this ticket on the board (Ship button or auto-merge).
 
-cd into `{{project.workspace}}/orchestrator` and run `/ship-feature {{ticket.id}}` exactly as that repo's `CLAUDE.md` and the command describe: read `tasks/{{ticket.id}}/state.json`, `scripts/merge-fleet.sh {{ticket.id}} --dry-run` first, then the real run. Expect it to take a while; do not shorten timeouts and do not push to any fleet repo's `main` meanwhile.
+cd into `{{project.workspace}}/orchestrator` and run `/ship-feature {{ticket.id}}` exactly as that repo's `CLAUDE.md` and the command describe: read `tasks/{{ticket.id}}/state.json`, `scripts/merge-fleet.sh {{ticket.id}} --dry-run` first, then the real run. Run the script in the foreground with a long timeout (up to 60 minutes) and wait for it inside this turn. Never start it in the background: this session is headless, a background process is killed the moment your turn ends, and the fleet would be left half-merged. Do not push to any fleet repo's `main` meanwhile.
 
 Report on the board:
 - `ticket progress shipping "<n> PRs, <t> tiers"` before the real merge starts.

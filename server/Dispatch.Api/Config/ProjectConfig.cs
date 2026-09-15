@@ -48,7 +48,8 @@ public sealed record ProjectPrompts(string Refine, string Work, string Answer, s
         The review gate for this feature is PASSED and the human has authorised the merge for this ticket on the board.
 
         cd into `{{project.workspace}}/orchestrator` and run `/ship-feature {{ticket.id}}` exactly as that repo's `CLAUDE.md` describes:
-        dry run first, then the real merge, and never a manual fix if it halts.
+        dry run first, then the real merge in the foreground with a long timeout, and never a manual fix if it halts.
+        Do not start anything in the background: this session is headless and background processes die when the turn ends.
 
         Report with `ticket progress shipping`, and when every slice is merged and live, `ticket progress shipped "<repos>"`.
         If the ship halts or rolls back, post `ticket progress halted|rolled-back "<reason>"`, `ticket comment` the incident, and stop.
