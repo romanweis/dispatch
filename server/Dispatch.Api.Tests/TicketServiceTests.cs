@@ -179,6 +179,35 @@ public sealed class TicketServiceTests : IAsyncLifetime
         Assert.Contains(calls, c => c.StartsWith($"exec t-{ticket.Id} git") && c.Contains($"commit -m feat({ticket.Id}): {reloaded.Slug}"));
         Assert.Contains(calls, c => c.StartsWith($"exec t-{ticket.Id} git") && c.EndsWith(" push"));
         Assert.Equal(ContainerState.Running, await _host.Incus.GetStateAsync($"t-{ticket.Id}"));
+
+        // Remote main may have moved since the container was created: rebase before pushing.
+        var pullIndex = calls.FindIndex(c => c.StartsWith($"exec t-{ticket.Id} git") && c.EndsWith(" pull --rebase"));
+        var pushIndex = calls.FindIndex(c => c.StartsWith($"exec t-{ticket.Id} git") && c.EndsWith(" push"));
+        Assert.True(pullIndex >= 0, "expected git pull --rebase before push");
+        Assert.True(pullIndex < pushIndex, "git pull --rebase must run before git push");
+    }
+
+    [Fact]
+    public async Task Start_fails_and_aborts_rebase_when_pull_rebase_fails()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        await _host.SetAsync(ticket.Id, t =>
+        {
+            t.Status = TicketStatus.Ready;
+            t.Spec = "spec";
+        });
+        _host.Incus.ExecHandler = (_, args) =>
+            args.Contains("pull") ? new ExecResult(1, "", "CONFLICT (content)") : new ExecResult(0, "", "");
+
+        using var scope = _host.Scope();
+        var ex = await Assert.ThrowsAsync<DispatchException>(() => _host.Tickets(scope).StartAsync(ticket.Id));
+        Assert.Equal("git_failed", ex.Code);
+        Assert.Contains("pull --rebase", ex.Message);
+
+        var calls = _host.Incus.Calls.ToList();
+        Assert.Contains(calls, c => c.StartsWith($"exec t-{ticket.Id} git") && c.EndsWith(" rebase --abort"));
+        Assert.DoesNotContain(calls, c => c.StartsWith($"exec t-{ticket.Id} git") && c.EndsWith(" push"));
+        Assert.Equal(TicketStatus.Ready, (await _host.ReloadAsync(ticket.Id)).Status);
     }
 
     [Fact]

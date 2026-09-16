@@ -570,6 +570,15 @@ public sealed class TicketService(
             logger.LogInformation("Feature file for ticket {TicketId} unchanged; nothing to commit", ticket.Id);
         }
 
+        // Another ticket (or a human) may have pushed to main since this container was created:
+        // integrate remote changes first so the push is a fast-forward.
+        var pull = await incus.ExecAsync(container, [.. gitArgs, "pull", "--rebase"], orchestratorDir, ct: ct);
+        if (!pull.Success)
+        {
+            await incus.ExecAsync(container, ["git", "rebase", "--abort"], orchestratorDir, ct: ct);
+            throw new DispatchException("git_failed", $"git pull --rebase failed: {(pull.Stdout + pull.Stderr).Trim()}", 502);
+        }
+
         var push = await incus.ExecAsync(container, [.. gitArgs, "push"], orchestratorDir, ct: ct);
         if (!push.Success)
         {
