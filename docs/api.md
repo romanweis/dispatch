@@ -61,7 +61,7 @@ TicketDetail = Ticket & { questions: Question[]; comments: Comment[]; runs: Run[
 | GET | `/api/tickets` | `?projectId=&status=` | `Ticket[]` | ordered by updatedAt desc |
 | POST | `/api/tickets` | `{projectId, title, body, autoMerge?, type?, start?}` | `Ticket` 201 | status `backlog`; `type` defaults to `feature`. A `task` with `start` omitted or true is started immediately (see Tasks); if that fails the ticket stays `backlog` with a `system` comment |
 | GET | `/api/tickets/{id}` | | `TicketDetail` | |
-| PATCH | `/api/tickets/{id}` | `{title?, body?, spec?, autoMerge?}` | `Ticket` | spec editable only in `ready`/`needs_input`/`backlog`; `autoMerge` any time |
+| PATCH | `/api/tickets/{id}` | `{title?, body?, spec?, autoMerge?}` | `Ticket` | spec editable only in `ready`/`needs_input`/`backlog`; `autoMerge` any time on a feature, 400 when turning it off on a task |
 | DELETE | `/api/tickets/{id}` | | 204 | deletes container too |
 | POST | `/api/tickets/{id}/refine` | | `Run` 202 | allowed from `backlog`, `needs_input` (when no unanswered questions), `failed` |
 | POST | `/api/tickets/{id}/answer` | `{answers: [{questionId, answer}]}` | `Run` 202 | stores answers, then queues run kind `answer` (resume) |
@@ -98,7 +98,7 @@ Auto-merge: when a run would land in `review` and the ticket has `autoMerge == t
 
 Workspace sync: every refine run, every work run (feature and task) and a fresh answer run without a session start with the project's sync prompt (`prompts/sync.md`, built-in default otherwise): fetch and fast-forward every repo in the workspace before reading or changing anything, and `ticket ask` instead of forcing when a repo cannot be fast-forwarded. Ticket containers are copies of a project base image whose clones may be old. Resume and ship runs continue an already-synced session and do not repeat it.
 
-Tasks: a ticket with `type == "task"` skips refinement. `start` is allowed from `backlog`, `failed` or `ready`; when the ticket has no spec, Dispatch seeds the feature file with the title and body verbatim. The work run's prompt is the project's plan prompt (`prompts/plan.md`) followed by the work prompt, so one session still does plan -> implement -> review -> fix: the agent rewrites the feature file into a plan-template spec (`ticket spec`, `ticket progress planned`) without waiting for approval, then runs `/start-feature` and `/review-feature` as usual. Merge stays behind Ship or auto-merge. The agent may still `ticket ask` when something material is ambiguous.
+Tasks: a ticket with `type == "task"` skips refinement. `start` is allowed from `backlog`, `failed` or `ready`; when the ticket has no spec, Dispatch seeds the feature file with the title and body verbatim. The work run's prompt is the project's plan prompt (`prompts/plan.md`) followed by the work prompt, so one session still does plan -> implement -> review -> fix: the agent rewrites the feature file into a plan-template spec (`ticket spec`, `ticket progress planned`) without waiting for approval, then runs `/start-feature` and `/review-feature` as usual. Tasks always carry `autoMerge == true`: it is forced on at creation (whatever the request says) and a `PATCH` setting it to `false` is a 400, so a task ships itself the moment the review gate passes, with no human click. Convert the work to a feature ticket if you want to review before shipping. The agent may still `ticket ask` when something material is ambiguous.
 
 ## Environment inside a ticket container
 

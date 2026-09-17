@@ -130,12 +130,18 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
             </span>
           </label>
         )}
-        <label className="flex items-center gap-2 text-[12.5px]">
-          <input type="checkbox" checked={autoMerge} onChange={(e) => setAutoMerge(e.target.checked)} className="accent-accent" />
-          <span>
-            Auto-merge <span className="text-fg-muted">(ship to production as soon as the review gate passes, without waiting in Review)</span>
-          </span>
-        </label>
+        {type === "task" ? (
+          <p className="text-[12.5px] text-fg-muted">
+            Tasks ship themselves: as soon as the review gate passes, the fleet is merged and deployed without waiting for you.
+          </p>
+        ) : (
+          <label className="flex items-center gap-2 text-[12.5px]">
+            <input type="checkbox" checked={autoMerge} onChange={(e) => setAutoMerge(e.target.checked)} className="accent-accent" />
+            <span>
+              Auto-merge <span className="text-fg-muted">(ship to production as soon as the review gate passes, without waiting in Review)</span>
+            </span>
+          </label>
+        )}
       </form>
     </Dialog>
   );

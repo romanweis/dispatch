@@ -235,6 +235,23 @@ public sealed class TicketServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Tasks_always_auto_merge()
+    {
+        Ticket task;
+        using (var scope = _host.Scope())
+        {
+            task = await _host.Tickets(scope).CreateAsync(_host.ProjectId, "Fix typo", null, autoMerge: false, type: TicketType.Task);
+        }
+
+        Assert.True(task.AutoMerge);
+
+        using var scope2 = _host.Scope();
+        var ex = await Assert.ThrowsAsync<DispatchException>(() => _host.Tickets(scope2).PatchAsync(task.Id, null, null, null, autoMerge: false));
+        Assert.Equal(400, ex.StatusCode);
+        Assert.True((await _host.ReloadAsync(task.Id)).AutoMerge);
+    }
+
+    [Fact]
     public async Task Feature_cannot_start_from_backlog_even_with_spec()
     {
         var ticket = await _host.CreateTicketAsync();

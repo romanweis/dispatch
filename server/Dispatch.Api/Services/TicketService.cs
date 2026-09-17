@@ -42,7 +42,8 @@ public sealed class TicketService(
             ProjectId = projectId,
             Title = title.Trim(),
             Body = body ?? "",
-            AutoMerge = autoMerge,
+            // Tasks ship themselves: a passed review gate goes straight to a ship run, no human click.
+            AutoMerge = autoMerge || type == TicketType.Task,
             Type = type,
             Status = TicketStatus.Backlog,
             Token = SlugGenerator.NewToken(),
@@ -86,6 +87,11 @@ public sealed class TicketService(
 
         if (autoMerge is { } am)
         {
+            if (!am && ticket.Type == TicketType.Task)
+            {
+                throw DispatchException.BadRequest("task tickets always auto-merge; convert it to a feature to review before shipping");
+            }
+
             ticket.AutoMerge = am;
         }
 

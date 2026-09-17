@@ -66,8 +66,14 @@ export function TicketHeader({ ticket }: { ticket: TicketDetail }) {
         <button
           type="button"
           onClick={() => void toggleAutoMerge()}
-          disabled={toggling || ticket.status === "done"}
-          title={ticket.autoMerge ? "Auto-merge on: a passed review gate ships the feature without waiting. Click to turn off." : "Auto-merge off: the ticket waits in Review until you press Ship. Click to turn on."}
+          disabled={toggling || ticket.status === "done" || ticket.type === "task"}
+          title={
+            ticket.type === "task"
+              ? "Tasks always auto-merge: a passed review gate ships them without waiting for you."
+              : ticket.autoMerge
+                ? "Auto-merge on: a passed review gate ships the feature without waiting. Click to turn off."
+                : "Auto-merge off: the ticket waits in Review until you press Ship. Click to turn on."
+          }
           aria-pressed={ticket.autoMerge}
           className={
             "inline-flex h-5 items-center gap-1 rounded border px-1.5 text-[11px] font-medium transition-colors disabled:opacity-60 " +
