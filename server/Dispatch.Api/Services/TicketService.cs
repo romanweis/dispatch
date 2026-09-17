@@ -22,7 +22,8 @@ public sealed class TicketService(
 
     // ---- CRUD ---------------------------------------------------------------
 
-    public async Task<Ticket> CreateAsync(int projectId, string title, string? body, bool autoMerge = false, CancellationToken ct = default)
+    public async Task<Ticket> CreateAsync(
+        int projectId, string title, string? body, bool autoMerge = false, TicketType type = TicketType.Feature, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
@@ -42,6 +43,7 @@ public sealed class TicketService(
             Title = title.Trim(),
             Body = body ?? "",
             AutoMerge = autoMerge,
+            Type = type,
             Status = TicketStatus.Backlog,
             Token = SlugGenerator.NewToken(),
             CreatedAt = now,
@@ -215,9 +217,17 @@ public sealed class TicketService(
     {
         var ticket = await LoadAsync(id, ct);
         await EnsureNoActiveRunAsync(ticket, ct);
-        if (ticket.Status != TicketStatus.Ready)
+        var taskShortcut = ticket.Type == TicketType.Task && ticket.Status is TicketStatus.Backlog or TicketStatus.Failed;
+        if (ticket.Status != TicketStatus.Ready && !taskShortcut)
         {
-            throw DispatchException.InvalidTransition($"cannot start from {EnumNames.ToWire(ticket.Status)}; ticket must be ready");
+            throw DispatchException.InvalidTransition(ticket.Type == TicketType.Task
+                ? $"cannot start a task from {EnumNames.ToWire(ticket.Status)}; it must be backlog, failed or ready"
+                : $"cannot start from {EnumNames.ToWire(ticket.Status)}; ticket must be ready");
+        }
+
+        if (taskShortcut && string.IsNullOrWhiteSpace(ticket.Spec))
+        {
+            ticket.Spec = TaskSpec(ticket);
         }
 
         if (string.IsNullOrWhiteSpace(ticket.Spec))
@@ -238,11 +248,31 @@ public sealed class TicketService(
         await CommitFeatureFileAsync(ticket, orchestrator, featureFile, ct);
 
         var prompt = PromptRenderer.Render(project.Prompts.Work, ticket, project.Config);
+        if (ticket.Type == TicketType.Task)
+        {
+            // No refinement happened: plan -> implement -> review -> fix all run in this one session.
+            prompt = PromptRenderer.Render(project.Prompts.Plan, ticket, project.Config) + "\n\n" + prompt;
+        }
+
         ticket.Status = TicketStatus.InProgress;
         var run = Enqueue(ticket, RunKind.Work, prompt);
         await TouchAndSaveAsync(ticket, ct);
         await PublishRunAsync(run.Id, ct);
         return run;
+    }
+
+    /// <summary>Auto-start right after creation. A failure (container, git) must not lose the new ticket: it stays in backlog with a system comment.</summary>
+    public async Task StartCreatedTaskAsync(long id, CancellationToken ct = default)
+    {
+        try
+        {
+            await StartAsync(id, ct);
+        }
+        catch (DispatchException ex)
+        {
+            logger.LogWarning(ex, "Auto-start of task ticket {TicketId} failed", id);
+            await AddCommentAsync(id, CommentAuthor.System, $"Auto-start failed: {ex.Message}. Press Start work to retry.", ct);
+        }
     }
 
     /// <summary>Human-triggered ship: only from review with a PASSED gate.</summary>
@@ -584,6 +614,16 @@ public sealed class TicketService(
         {
             throw new DispatchException("git_failed", $"git push failed: {push.Stderr.Trim()}", 502);
         }
+    }
+
+    /// <summary>Tasks skip refinement: the feature file starts as the human's request; the plan prompt has the agent rewrite it into a plan.</summary>
+    public static string TaskSpec(Ticket ticket)
+    {
+        var body = string.IsNullOrWhiteSpace(ticket.Body) ? "(no further description: the title says it all)" : ticket.Body.Trim();
+        return $"# {ticket.Title}\n\n" +
+               "_Task ticket, not planned yet. The text below is the human's request as written; " +
+               "the work run rewrites this file into a plan before implementing._\n\n" +
+               body + "\n";
     }
 
     private static bool TryParse(string? json, out JsonDocument? doc)

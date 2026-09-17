@@ -30,7 +30,13 @@ public static class TicketEndpoints
 
         group.MapPost("", async (CreateTicketRequest body, TicketService tickets, DtoMapper mapper, CancellationToken ct) =>
         {
-            var ticket = await tickets.CreateAsync(body.ProjectId, body.Title, body.Body, body.AutoMerge ?? false, ct);
+            var type = body.Type is null ? TicketType.Feature : EnumNames.Parse<TicketType>(body.Type);
+            var ticket = await tickets.CreateAsync(body.ProjectId, body.Title, body.Body, body.AutoMerge ?? false, type, ct);
+            if (type == TicketType.Task && (body.Start ?? true))
+            {
+                await tickets.StartCreatedTaskAsync(ticket.Id, ct);
+            }
+
             return Results.Created($"/api/tickets/{ticket.Id}", await mapper.TicketAsync(ticket.Id, ct));
         });
 

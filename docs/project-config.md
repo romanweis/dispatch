@@ -10,6 +10,7 @@ projects/<name>/
   prompts/work.md    # hand-over prompt template
   prompts/answer.md  # optional; default: "The user answered your questions:\n{{answers}}\n..."
   prompts/ship.md    # optional; default asks the agent to run /ship-feature {{ticket.id}} and report `shipped` 
+  prompts/plan.md    # optional; prepended to the work prompt for task tickets (agent writes the plan itself, no approval round)
   provision.sh       # runs as root inside the fresh base container, after repos are cloned (optional)
   provision-user.sh  # runs as uid 1000 inside the base container after provision.sh (optional)
 ```

@@ -65,7 +65,7 @@ export function OverviewTab({ ticket, answers, setAnswers, onStart, canStart }: 
         title="Spec"
         value={ticket.spec ?? ""}
         editable={SPEC_EDITABLE.has(ticket.status)}
-        emptyText={ticket.status === "backlog" ? "No spec yet. Run Refine to have the agent write one." : "No spec."}
+        emptyText={ticket.type === "task" && !ticket.spec ? "Task: no refinement round. The work run writes the plan from the body first." : ticket.status === "backlog" ? "No spec yet. Run Refine to have the agent write one." : "No spec."}
         onSave={(spec) => api.tickets.patch(ticket.id, { spec })}
         extra={
           canStart && ticket.spec ? (

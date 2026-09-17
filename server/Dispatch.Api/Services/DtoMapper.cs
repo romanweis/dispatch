@@ -95,6 +95,7 @@ public sealed class DtoMapper(DispatchDbContext db, IIncusService incus, IProjec
                 t.Project?.Name ?? registry.GetById(t.ProjectId)?.Config.Name ?? "",
                 t.Title,
                 t.Body,
+                t.Type,
                 t.Status,
                 t.AutoMerge,
                 t.Slug,

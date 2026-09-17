@@ -51,6 +51,7 @@ public sealed class DispatchDbContext(DbContextOptions<DispatchDbContext> option
         {
             e.ToTable("tickets");
             e.Property(t => t.Status).HasConversion(new SnakeCaseEnumConverter<TicketStatus>()).HasMaxLength(32);
+            e.Property(t => t.Type).HasConversion(new SnakeCaseEnumConverter<TicketType>()).HasMaxLength(16);
             e.Property(t => t.Token).HasMaxLength(64);
             e.HasIndex(t => t.Token).IsUnique();
             e.HasIndex(t => new { t.ProjectId, t.Status });

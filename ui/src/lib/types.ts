@@ -1,5 +1,8 @@
 // Mirror of docs/api.md. Keep in sync with the contract.
 
+/** feature: refined into a spec first. task: skips refinement, the body is the spec. */
+export type TicketType = "feature" | "task";
+
 export type TicketStatus =
   | "backlog"
   | "refining"
@@ -104,6 +107,7 @@ export interface Ticket {
   title: string;
   /** markdown */
   body: string;
+  type: TicketType;
   status: TicketStatus;
   /** when true a passed review gate queues a ship run (/ship-feature) instead of waiting in review */
   autoMerge: boolean;

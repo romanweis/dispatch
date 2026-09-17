@@ -77,6 +77,7 @@ cmd_show() {
     def sep: "----------------------------------------";
     "Ticket #\(.id)  [\(.status)]  project: \(.projectName)",
     "Title:  \(.title)",
+    "Type:   \(.type // "feature")\(if .type == "task" then " (not refined: the spec is the request as written)" else "" end)",
     (if .slug then "Slug:   \(.slug)" else empty end),
     "Auto-merge: \(if .autoMerge then "on (Dispatch queues a ship run when the review gate passes)" else "off (waits in review for the human)" end)",
     "",

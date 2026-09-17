@@ -40,8 +40,28 @@ public sealed class ClaudeConfig
     public int MaxTurnsWork { get; set; } = 400;
 }
 
-public sealed record ProjectPrompts(string Refine, string Work, string Answer, string Ship = ProjectPrompts.DefaultShip)
+public sealed record ProjectPrompts(
+    string Refine,
+    string Work,
+    string Answer,
+    string Ship = ProjectPrompts.DefaultShip,
+    string Plan = ProjectPrompts.DefaultPlan)
 {
+    /// <summary>Prepended to the work prompt for task tickets: the agent plans without a human approval round, then runs the normal cycle.</summary>
+    public const string DefaultPlan =
+        """
+        Ticket #{{ticket.id}} "{{ticket.title}}" is a task: it skipped refinement, so nobody has written or approved a plan yet.
+        The file features/{{ticket.id}}-{{ticket.slug}}.md in the orchestrator repo holds the human's request as written. Plan first, in this run:
+
+        1. `ticket show`, then explore `{{project.workspace}}` read-only (workspace CLAUDE.md, orchestrator repos.yaml, the affected repos' CLAUDE.md and code).
+        2. Rewrite features/{{ticket.id}}-{{ticket.slug}}.md in the shape of docs/plan-template.md. Keep the scope to what the request asks.
+           Put the original request verbatim under `## Optional appendix` and list any default assumptions you made there.
+        3. `ticket spec features/{{ticket.id}}-{{ticket.slug}}.md`, commit and push the file, `ticket progress planned "<repos>"`.
+        4. Do not ask for approval. Only if something material is genuinely ambiguous, or the task is really a multi-goal feature, `ticket ask` with your default and stop.
+
+        Then continue in the same run with the full cycle below (implement, review, fix) exactly as for a refined feature.
+        """;
+
     public const string DefaultShip =
         """
         Dispatch is asking you to ship ticket #{{ticket.id}} "{{ticket.title}}" (feature {{ticket.id}}, slug {{ticket.slug}}).

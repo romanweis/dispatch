@@ -22,6 +22,7 @@ public record TicketDto(
     string ProjectName,
     string Title,
     string Body,
+    TicketType Type,
     TicketStatus Status,
     bool AutoMerge,
     string? Slug,
@@ -85,7 +86,9 @@ public sealed record ErrorDto(string Error, string Code);
 
 // ---- request bodies -------------------------------------------------------
 
-public sealed record CreateTicketRequest(int ProjectId, string Title, string? Body, bool? AutoMerge);
+/// <param name="Type">feature (default) or task.</param>
+/// <param name="Start">Queue the work run right away; defaults to true for tasks. Ignored for features.</param>
+public sealed record CreateTicketRequest(int ProjectId, string Title, string? Body, bool? AutoMerge, string? Type, bool? Start);
 
 public sealed record PatchTicketRequest(string? Title, string? Body, string? Spec, bool? AutoMerge);
 

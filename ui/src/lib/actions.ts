@@ -10,8 +10,9 @@ export function allowedActions(t: Ticket) {
   return {
     refine: !running && (t.status === "backlog" || t.status === "failed" || (t.status === "needs_input" && t.openQuestions === 0)),
     answer: !running && t.status === "needs_input" && t.openQuestions > 0,
-    start: !running && t.status === "ready",
-    startNeedsSpec: t.status === "ready" && !t.spec,
+    // Tasks skip refinement: they start straight from backlog (or again after a failure) with the body as spec.
+    start: !running && (t.status === "ready" || (t.type === "task" && (t.status === "backlog" || t.status === "failed"))),
+    startNeedsSpec: t.status === "ready" && !t.spec && t.type !== "task",
     resume: !running && !!t.claudeSessionId && t.status !== "done",
     ship: !running && t.status === "review" && gatePassed(t),
     cancel: running,

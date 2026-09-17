@@ -74,7 +74,8 @@ public sealed class TestHost : IAsyncDisposable
         var prompts = new ProjectPrompts(
             "REFINE {{ticket.id}} {{ticket.title}}",
             "WORK {{ticket.id}} {{ticket.slug}} {{project.workspace}}",
-            ProjectPrompts.DefaultAnswer);
+            ProjectPrompts.DefaultAnswer,
+            Plan: "PLAN {{ticket.id}} {{ticket.slug}}");
         Project = new LoadedProject(project.Id, "/projects/demo", config, prompts);
         Services.GetRequiredService<IProjectRegistry>().Set(Project);
     }

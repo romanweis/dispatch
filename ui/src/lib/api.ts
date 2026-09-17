@@ -7,6 +7,7 @@ import type {
   Ticket,
   TicketDetail,
   TicketStatus,
+  TicketType,
 } from "./types";
 
 export class ApiError extends Error {
@@ -95,7 +96,7 @@ export const api = {
   tickets: {
     list: (filter: { projectId?: number; status?: TicketStatus } = {}, signal?: AbortSignal) =>
       request<Ticket[]>("GET", `/api/tickets${qs(filter)}`, undefined, signal),
-    create: (input: { projectId: number; title: string; body: string; autoMerge?: boolean }) =>
+    create: (input: { projectId: number; title: string; body: string; autoMerge?: boolean; type?: TicketType; start?: boolean }) =>
       request<Ticket>("POST", "/api/tickets", input),
     get: (id: number, signal?: AbortSignal) =>
       request<TicketDetail>("GET", `/api/tickets/${id}`, undefined, signal),

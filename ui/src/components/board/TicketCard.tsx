@@ -40,6 +40,11 @@ export const TicketCard = memo(function TicketCard({ ticket, active, overlay }: 
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[11px] text-fg-faint">#{ticket.id}</span>
         <div className="flex items-center gap-1.5">
+          {ticket.type === "task" && (
+            <Badge tone="info" title="Task: no refinement round, the agent plans and implements in one go">
+              task
+            </Badge>
+          )}
           {ticket.autoMerge && <GitMerge size={12} className="text-ok" aria-label="Auto-merge on" />}
           {running && <Loader2 size={12} className="animate-spin text-info" aria-label="Run active" />}
           <Badge tone="neutral" className="max-w-[120px] truncate" title={ticket.projectName}>

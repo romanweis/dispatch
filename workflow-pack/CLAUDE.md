@@ -75,6 +75,8 @@ So: the human review that used to sit between your diff and production is gone, 
 1. `git -C {{WORKSPACE}}/orchestrator status --short features/`. If the feature file is untracked or modified, commit it (`feat(<id>): <slug>`) and push. `scripts/commit-feature-spec.sh` is not needed for this; it exists for hand-driven features.
 2. Run `/start-feature <id>`.
 
+**Task tickets (Dispatch, no refinement).** The human marked the ticket as a task, so there was no question round and no approval. The feature file holds their request verbatim and your prompt starts with a plan step: rewrite the feature file into the plan-template shape yourself, `ticket spec` it, commit and push, `ticket progress planned`, then run `/start-feature <id>` as above. The rest of the cycle (review, fix, gate, ship only when Dispatch asks) is unchanged.
+
 **Spec-first (secondary).** Someone committed `features/<id>-<slug>.md` by hand (for example via `scripts/commit-feature-spec.sh <plan-path> <slug>`) and runs `/start-feature <id>` directly. Same rules apply.
 
 The slug is chosen once and never changes: branch `feat/<id>-<slug>`, PR title prefix `[feat-<id>]`, PR label `feature:<id>`.

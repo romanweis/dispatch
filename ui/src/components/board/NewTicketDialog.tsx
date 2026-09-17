@@ -1,11 +1,18 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import type { TicketType } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { useBoardStore } from "@/store/board";
 import { toastError } from "@/store/toasts";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/Field";
+
+const TYPES: { value: TicketType; label: string; hint: string }[] = [
+  { value: "feature", label: "Feature", hint: "Refine into a spec, answer questions, then start" },
+  { value: "task", label: "Task", hint: "Clear enough already: no Q&A round, the agent plans, builds, reviews and fixes on its own" },
+];
 
 export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const projects = useBoardStore((s) => s.projects);
@@ -15,6 +22,8 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [autoMerge, setAutoMerge] = useState(false);
+  const [type, setType] = useState<TicketType>("feature");
+  const [startNow, setStartNow] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -22,6 +31,8 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
       setTitle("");
       setBody("");
       setAutoMerge(false);
+      setType("feature");
+      setStartNow(true);
       setBusy(false);
       setProjectId((cur) => (cur === "" && projects.length > 0 ? projects[0].id : cur));
     }
@@ -34,7 +45,7 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
     if (!canSubmit) return;
     setBusy(true);
     try {
-      const ticket = await api.tickets.create({ projectId: Number(projectId), title: title.trim(), body, autoMerge });
+      const ticket = await api.tickets.create({ projectId: Number(projectId), title: title.trim(), body, autoMerge, type, start: type === "task" && startNow });
       applyTicket(ticket);
       onClose();
       navigate(`/tickets/${ticket.id}`);
@@ -56,7 +67,7 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
             Cancel
           </Button>
           <Button variant="primary" form="new-ticket-form" type="submit" disabled={!canSubmit} loading={busy}>
-            Create
+            {type === "task" && startNow ? "Create and start" : "Create"}
           </Button>
         </>
       }
@@ -74,6 +85,27 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
           </Select>
         </div>
         <div>
+          <Label>Type</Label>
+          <div role="radiogroup" className="grid grid-cols-2 gap-2">
+            {TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                role="radio"
+                aria-checked={type === t.value}
+                onClick={() => setType(t.value)}
+                className={cn(
+                  "rounded-md border px-2.5 py-2 text-left transition-colors",
+                  type === t.value ? "border-accent/70 bg-accent-soft" : "border-line hover:border-line-strong",
+                )}
+              >
+                <div className="text-[12.5px] font-medium text-fg">{t.label}</div>
+                <div className="text-[11.5px] text-fg-muted">{t.hint}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
           <Label htmlFor="nt-title">Title</Label>
           <Input id="nt-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short, imperative summary" autoFocus required />
         </div>
@@ -86,10 +118,18 @@ export function NewTicketDialog({ open, onClose }: { open: boolean; onClose: () 
             rows={8}
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Context, goals, constraints. The refine step will turn this into a spec."
+            placeholder={type === "task" ? "What exactly to do. The agent turns this into a plan itself, without asking." : "Context, goals, constraints. The refine step will turn this into a spec."}
             className="font-mono text-[12px]"
           />
         </div>
+        {type === "task" && (
+          <label className="flex items-center gap-2 text-[12.5px]">
+            <input type="checkbox" checked={startNow} onChange={(e) => setStartNow(e.target.checked)} className="accent-accent" />
+            <span>
+              Start work immediately <span className="text-fg-muted">(otherwise it waits in Backlog with a Start button)</span>
+            </span>
+          </label>
+        )}
         <label className="flex items-center gap-2 text-[12.5px]">
           <input type="checkbox" checked={autoMerge} onChange={(e) => setAutoMerge(e.target.checked)} className="accent-accent" />
           <span>

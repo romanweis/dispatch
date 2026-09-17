@@ -53,6 +53,32 @@ public sealed class CliAuthTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Creating_a_task_queues_work_unless_start_is_false()
+    {
+        var client = _factory.CreateClient();
+        var projects = await client.GetFromJsonAsync<List<ProjectDto>>("/api/projects", Json);
+        var projectId = Assert.Single(projects!).Id;
+
+        var started = await client.PostAsJsonAsync("/api/tickets", new { projectId, title = "Fix footer typo", body = "", type = "task" }, Json);
+        Assert.Equal(HttpStatusCode.Created, started.StatusCode);
+        var startedTicket = (await started.Content.ReadFromJsonAsync<TicketDto>(Json))!;
+        Assert.Equal(TicketType.Task, startedTicket.Type);
+        Assert.NotEqual(TicketStatus.Backlog, startedTicket.Status);
+
+        var parked = await client.PostAsJsonAsync("/api/tickets", new { projectId, title = "Later", body = "", type = "task", start = false }, Json);
+        var parkedTicket = (await parked.Content.ReadFromJsonAsync<TicketDto>(Json))!;
+        Assert.Equal(TicketStatus.Backlog, parkedTicket.Status);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DispatchDbContext>();
+        Assert.True(await db.Runs.AnyAsync(r => r.TicketId == startedTicket.Id && r.Kind == RunKind.Work));
+        Assert.False(await db.Runs.AnyAsync(r => r.TicketId == parkedTicket.Id));
+
+        var bad = await client.PostAsJsonAsync("/api/tickets", new { projectId, title = "x", type = "epic" }, Json);
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+    }
+
+    [Fact]
     public async Task Cli_endpoints_require_bearer_token()
     {
         var client = _factory.CreateClient();

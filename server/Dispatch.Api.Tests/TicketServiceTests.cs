@@ -187,6 +187,69 @@ public sealed class TicketServiceTests : IAsyncLifetime
         Assert.True(pullIndex < pushIndex, "git pull --rebase must run before git push");
     }
 
+    [Theory]
+    [InlineData(TicketStatus.Backlog)]
+    [InlineData(TicketStatus.Failed)]
+    public async Task Task_starts_without_refinement_and_plans_before_work(TicketStatus status)
+    {
+        Ticket ticket;
+        using (var scope = _host.Scope())
+        {
+            ticket = await _host.Tickets(scope).CreateAsync(_host.ProjectId, "Bump node to 22", "Update .nvmrc and CI.", type: TicketType.Task);
+        }
+
+        await _host.SetAsync(ticket.Id, t => t.Status = status);
+
+        using var scope2 = _host.Scope();
+        var run = await _host.Tickets(scope2).StartAsync(ticket.Id);
+        var reloaded = await _host.ReloadAsync(ticket.Id);
+
+        Assert.Equal(RunKind.Work, run.Kind);
+        // plan -> implement -> review -> fix in one session: the plan prompt is prepended to the regular work prompt.
+        Assert.Equal($"PLAN {ticket.Id} {reloaded.Slug}\n\nWORK {ticket.Id} {reloaded.Slug} /home/agent/demo", run.Prompt);
+        Assert.Equal(TicketType.Task, reloaded.Type);
+        Assert.Equal(TicketStatus.InProgress, reloaded.Status);
+        Assert.StartsWith("# Bump node to 22\n", reloaded.Spec);
+        Assert.Contains("Update .nvmrc and CI.", reloaded.Spec);
+        Assert.Contains($"push t-{ticket.Id}/home/agent/demo/orchestrator/features/{ticket.Id}-{reloaded.Slug}.md", _host.Incus.Calls);
+    }
+
+    [Fact]
+    public async Task Feature_cannot_start_from_backlog_even_with_spec()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        await _host.SetAsync(ticket.Id, t => t.Spec = "spec");
+
+        using var scope = _host.Scope();
+        var ex = await Assert.ThrowsAsync<DispatchException>(() => _host.Tickets(scope).StartAsync(ticket.Id));
+        Assert.Equal("invalid_transition", ex.Code);
+    }
+
+    [Fact]
+    public async Task Auto_start_failure_keeps_task_in_backlog_with_system_comment()
+    {
+        Ticket ticket;
+        using (var scope = _host.Scope())
+        {
+            ticket = await _host.Tickets(scope).CreateAsync(_host.ProjectId, "Fix typo", "", type: TicketType.Task);
+        }
+
+        _host.Incus.ExecHandler = (_, args) =>
+            args.Contains("push") ? new ExecResult(1, "", "rejected") : new ExecResult(0, "", "");
+
+        using (var scope = _host.Scope())
+        {
+            await _host.Tickets(scope).StartCreatedTaskAsync(ticket.Id);
+        }
+
+        using var scope2 = _host.Scope();
+        var db = _host.Db(scope2);
+        Assert.Equal(TicketStatus.Backlog, (await _host.ReloadAsync(ticket.Id)).Status);
+        var comment = await db.Comments.SingleAsync(c => c.TicketId == ticket.Id);
+        Assert.Equal(CommentAuthor.System, comment.Author);
+        Assert.Contains("Auto-start failed", comment.Text);
+    }
+
     [Fact]
     public async Task Start_fails_and_aborts_rebase_when_pull_rebase_fails()
     {

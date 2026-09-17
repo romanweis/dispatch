@@ -14,6 +14,13 @@ public enum TicketStatus
     Failed,
 }
 
+/// <summary>feature: refine into a spec first. task: clear enough to skip refinement; the body is the spec.</summary>
+public enum TicketType
+{
+    Feature,
+    Task,
+}
+
 public enum RunKind
 {
     Refine,
@@ -62,6 +69,7 @@ public sealed class Ticket
     public Project? Project { get; set; }
     public required string Title { get; set; }
     public string Body { get; set; } = "";
+    public TicketType Type { get; set; } = TicketType.Feature;
     public TicketStatus Status { get; set; } = TicketStatus.Backlog;
     public string? Slug { get; set; }
     public string? Spec { get; set; }
