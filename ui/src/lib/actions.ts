@@ -11,10 +11,12 @@ export function allowedActions(t: Ticket) {
     refine: !running && (t.status === "backlog" || t.status === "failed" || (t.status === "needs_input" && t.openQuestions === 0)),
     answer: !running && t.status === "needs_input" && t.openQuestions > 0,
     // Tasks skip refinement: they start straight from backlog (or again after a failure) with the body as spec.
-    start: !running && (t.status === "ready" || (t.type === "task" && (t.status === "backlog" || t.status === "failed"))),
+    // once the gate has passed the work is done: Start would re-plan it, so the board offers Ship instead
+    start: !running && !gatePassed(t) && (t.status === "ready" || (t.type === "task" && (t.status === "backlog" || t.status === "failed"))),
     startNeedsSpec: t.status === "ready" && !t.spec && t.type !== "task",
     resume: !running && !!t.claudeSessionId && t.status !== "done",
-    ship: !running && t.status === "review" && gatePassed(t),
+    // a ship run that failed halfway leaves the ticket failed; merge-fleet.sh resumes, so offer Ship there too
+    ship: !running && gatePassed(t) && (t.status === "review" || t.status === "failed"),
     cancel: running,
     done: !running && (t.status === "review" || t.status === "in_progress" || t.status === "failed"),
     refresh: t.container !== null,

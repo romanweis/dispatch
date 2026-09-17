@@ -166,7 +166,14 @@ public sealed class IncusService(
 
     public IReadOnlyDictionary<string, string> BuildTicketEnvironment(Ticket ticket, LoadedProject project)
     {
-        var env = new Dictionary<string, string>(StringComparer.Ordinal);
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            // Claude Code caps Bash timeouts at 600000ms by default, and merge-fleet.sh waits for CI plus a
+            // production deploy per tier (CI_TIMEOUT + DEPLOY_TIMEOUT = 80 minutes worst case). Without this the
+            // ship run's own merge call is refused. A project can override both in its env: block.
+            ["BASH_DEFAULT_TIMEOUT_MS"] = "600000",
+            ["BASH_MAX_TIMEOUT_MS"] = "5400000",
+        };
         foreach (var (k, v) in project.Config.Env)
         {
             env[k] = v;

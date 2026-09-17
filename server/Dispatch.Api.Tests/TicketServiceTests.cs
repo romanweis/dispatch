@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Dispatch.Api;
 using Dispatch.Api.Data;
@@ -232,6 +233,51 @@ public sealed class TicketServiceTests : IAsyncLifetime
         var run = await _host.Tickets(scope2).AnswerAsync(ticket.Id, [new AnswerItem(questions[0].Id, "Postgres")]);
 
         Assert.StartsWith($"SYNC /home/agent/demo{NL}{NL}REFINE ", run.Prompt);
+    }
+
+    [Fact]
+    public async Task Start_after_a_failed_ship_ships_again_instead_of_re_planning()
+    {
+        Ticket ticket;
+        using (var scope = _host.Scope())
+        {
+            ticket = await _host.Tickets(scope).CreateAsync(_host.ProjectId, "Fix typo", "body", type: TicketType.Task);
+        }
+
+        // what a failed ship run leaves behind: work done, gate PASSED, ticket failed
+        await _host.SetAsync(ticket.Id, t =>
+        {
+            t.Status = TicketStatus.Failed;
+            t.Spec = "spec";
+            t.Slug = "fix-typo-abc";
+            t.WorkflowState = JsonDocument.Parse("""{"gate":"PASSED"}""");
+        });
+
+        using (var scope = _host.Scope())
+        {
+            var run = await _host.Tickets(scope).StartAsync(ticket.Id);
+            Assert.Equal(RunKind.Ship, run.Kind);
+        }
+
+        Assert.Equal(TicketStatus.InProgress, (await _host.ReloadAsync(ticket.Id)).Status);
+        Assert.DoesNotContain(_host.Incus.Calls, c => c.Contains("/features/"));
+    }
+
+    [Fact]
+    public async Task Ship_is_allowed_from_failed_when_the_gate_passed()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        await _host.SetAsync(ticket.Id, t =>
+        {
+            t.Status = TicketStatus.Failed;
+            t.Slug = "add-login-abc";
+            t.WorkflowState = JsonDocument.Parse("""{"gate":"PASSED"}""");
+        });
+
+        using var scope = _host.Scope();
+        var run = await _host.Tickets(scope).ShipAsync(ticket.Id);
+
+        Assert.Equal(RunKind.Ship, run.Kind);
     }
 
     [Fact]

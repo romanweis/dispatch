@@ -223,6 +223,17 @@ public sealed class TicketService(
     {
         var ticket = await LoadAsync(id, ct);
         await EnsureNoActiveRunAsync(ticket, ct);
+
+        // The work is already done and reviewed (e.g. a ship run failed and left the ticket in failed):
+        // re-running work would re-plan and re-implement a finished feature. Finish shipping instead.
+        if (GatePassed(ticket))
+        {
+            var shipRun = QueueShip(ticket);
+            await TouchAndSaveAsync(ticket, ct);
+            await PublishRunAsync(shipRun.Id, ct);
+            return shipRun;
+        }
+
         var taskShortcut = ticket.Type == TicketType.Task && ticket.Status is TicketStatus.Backlog or TicketStatus.Failed;
         if (ticket.Status != TicketStatus.Ready && !taskShortcut)
         {
@@ -287,12 +298,13 @@ public sealed class TicketService(
     {
         var ticket = await LoadAsync(id, ct);
         await EnsureNoActiveRunAsync(ticket, ct);
-        if (ticket.Status != TicketStatus.Review)
+        // failed is allowed too: a ship run that died halfway leaves the ticket failed, and merge-fleet.sh resumes.
+        if (ticket.Status is not (TicketStatus.Review or TicketStatus.Failed))
         {
-            throw DispatchException.InvalidTransition($"cannot ship from {EnumNames.ToWire(ticket.Status)}; ticket must be review");
+            throw DispatchException.InvalidTransition($"cannot ship from {EnumNames.ToWire(ticket.Status)}; ticket must be review or failed");
         }
 
-        if (!string.Equals(RunOutcome.ReadGate(ticket.WorkflowState), "PASSED", StringComparison.OrdinalIgnoreCase))
+        if (!GatePassed(ticket))
         {
             throw DispatchException.InvalidTransition("review gate is not PASSED");
         }
@@ -622,6 +634,9 @@ public sealed class TicketService(
             throw new DispatchException("git_failed", $"git push failed: {push.Stderr.Trim()}", 502);
         }
     }
+
+    private static bool GatePassed(Ticket ticket) =>
+        string.Equals(RunOutcome.ReadGate(ticket.WorkflowState), "PASSED", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Every fresh refine/work run starts by pulling the workspace up to date; resume and ship runs continue an already-synced session.</summary>
     private static string WithSync(LoadedProject project, Ticket ticket, string prompt) =>

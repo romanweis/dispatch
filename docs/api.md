@@ -65,8 +65,8 @@ TicketDetail = Ticket & { questions: Question[]; comments: Comment[]; runs: Run[
 | DELETE | `/api/tickets/{id}` | | 204 | deletes container too |
 | POST | `/api/tickets/{id}/refine` | | `Run` 202 | allowed from `backlog`, `needs_input` (when no unanswered questions), `failed` |
 | POST | `/api/tickets/{id}/answer` | `{answers: [{questionId, answer}]}` | `Run` 202 | stores answers, then queues run kind `answer` (resume) |
-| POST | `/api/tickets/{id}/start` | | `Run` 202 | from `ready`; needs `spec`; sets slug, writes feature file, runs work. Tasks also from `backlog`/`failed` |
-| POST | `/api/tickets/{id}/ship` | | `Run` 202 | from `review` with `workflowState.gate == PASSED`; queues run kind `ship` (`/ship-feature`), ticket -> `in_progress` |
+| POST | `/api/tickets/{id}/start` | | `Run` 202 | from `ready`; needs `spec`; sets slug, writes feature file, runs work. Tasks also from `backlog`/`failed`. When the gate is already `PASSED` it queues a `ship` run instead of re-planning finished work |
+| POST | `/api/tickets/{id}/ship` | | `Run` 202 | from `review` or `failed` (a ship run that died halfway) with `workflowState.gate == PASSED`; queues run kind `ship` (`/ship-feature`), ticket -> `in_progress` |
 | POST | `/api/tickets/{id}/resume` | `{message}` | `Run` 202 | free-form message into the existing session, from any non-running state with a session |
 | POST | `/api/tickets/{id}/cancel` | | `Run` | kills the active run, ticket -> `failed` |
 | POST | `/api/tickets/{id}/done` | `{snapshot?: boolean}` | `Ticket` | from `review`/`in_progress`/`failed`; deletes container |
@@ -102,4 +102,4 @@ Tasks: a ticket with `type == "task"` skips refinement. `start` is allowed from 
 
 ## Environment inside a ticket container
 
-`DISPATCH_URL` (e.g. `http://10.10.10.1:9300`), `DISPATCH_TOKEN`, `TICKET_ID`, `DISPATCH_PROJECT`.
+`DISPATCH_URL` (e.g. `http://10.10.10.1:9300`), `DISPATCH_TOKEN`, `TICKET_ID`, `DISPATCH_PROJECT`, plus `BASH_DEFAULT_TIMEOUT_MS=600000` and `BASH_MAX_TIMEOUT_MS=5400000` so a ship run can wait for `merge-fleet.sh` (CI plus a production deploy per tier) in one foreground call. A project's `env:` block overrides any of them.
