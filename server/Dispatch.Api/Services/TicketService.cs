@@ -158,7 +158,7 @@ public sealed class TicketService(
         }
 
         var project = registry.Require(ticket.ProjectId);
-        var prompt = PromptRenderer.Render(project.Prompts.Refine, ticket, project.Config);
+        var prompt = WithSync(project, ticket, PromptRenderer.Render(project.Prompts.Refine, ticket, project.Config));
         ticket.Status = TicketStatus.Refining;
         var run = Enqueue(ticket, RunKind.Refine, prompt);
         await TouchAndSaveAsync(ticket, ct);
@@ -202,8 +202,8 @@ public sealed class TicketService(
         var prompt = PromptRenderer.Render(project.Prompts.Answer, ticket, project.Config, answers: answered);
         if (ticket.ClaudeSessionId is null)
         {
-            // No session to resume: start fresh with the refine prompt followed by the answers.
-            prompt = PromptRenderer.Render(project.Prompts.Refine, ticket, project.Config) + "\n\n" + prompt;
+            // No session to resume: start fresh with the sync step and the refine prompt, followed by the answers.
+            prompt = WithSync(project, ticket, PromptRenderer.Render(project.Prompts.Refine, ticket, project.Config)) + "\n\n" + prompt;
         }
 
         ticket.Status = TicketStatus.Refining;
@@ -254,6 +254,7 @@ public sealed class TicketService(
             prompt = PromptRenderer.Render(project.Prompts.Plan, ticket, project.Config) + "\n\n" + prompt;
         }
 
+        prompt = WithSync(project, ticket, prompt);
         ticket.Status = TicketStatus.InProgress;
         var run = Enqueue(ticket, RunKind.Work, prompt);
         await TouchAndSaveAsync(ticket, ct);
@@ -615,6 +616,10 @@ public sealed class TicketService(
             throw new DispatchException("git_failed", $"git push failed: {push.Stderr.Trim()}", 502);
         }
     }
+
+    /// <summary>Every fresh refine/work run starts by pulling the workspace up to date; resume and ship runs continue an already-synced session.</summary>
+    private static string WithSync(LoadedProject project, Ticket ticket, string prompt) =>
+        PromptRenderer.Render(project.Prompts.Sync, ticket, project.Config) + "\n\n" + prompt;
 
     /// <summary>Tasks skip refinement: the feature file starts as the human's request; the plan prompt has the agent rewrite it into a plan.</summary>
     public static string TaskSpec(Ticket ticket)

@@ -45,8 +45,23 @@ public sealed record ProjectPrompts(
     string Work,
     string Answer,
     string Ship = ProjectPrompts.DefaultShip,
-    string Plan = ProjectPrompts.DefaultPlan)
+    string Plan = ProjectPrompts.DefaultPlan,
+    string Sync = ProjectPrompts.DefaultSync)
 {
+    /// <summary>Prepended to every refine and work prompt: the container is a copy of a base image whose clones may be old.</summary>
+    public const string DefaultSync =
+        """
+        Before anything else, get the workspace onto the latest code. This container was copied from a base image whose clones may be days old.
+
+        For every repository in `{{project.workspace}}` (including `orchestrator`):
+        - `git -C <repo> fetch origin --prune`
+        - if it is on `main` with a clean tree: `git -C <repo> pull --ff-only`
+        - if it is on a feature branch of this ticket, leave it as it is; the step that owns that branch rebases it.
+
+        Never force, reset or stash to get past this. If a repo cannot be fast-forwarded, `ticket ask` with the repo and the reason, and stop.
+        Only once the workspace is current, continue with the task below.
+        """;
+
     /// <summary>Prepended to the work prompt for task tickets: the agent plans without a human approval round, then runs the normal cycle.</summary>
     public const string DefaultPlan =
         """

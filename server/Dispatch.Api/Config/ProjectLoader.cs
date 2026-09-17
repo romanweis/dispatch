@@ -100,7 +100,8 @@ public sealed class ProjectLoader(
             Read("work.md", ProjectPrompts.DefaultWork, warn: true),
             Read("answer.md", ProjectPrompts.DefaultAnswer, warn: false),
             Read("ship.md", ProjectPrompts.DefaultShip, warn: false),
-            Read("plan.md", ProjectPrompts.DefaultPlan, warn: false));
+            Read("plan.md", ProjectPrompts.DefaultPlan, warn: false),
+            Read("sync.md", ProjectPrompts.DefaultSync, warn: false));
     }
 
     private async Task<LoadedProject> LoadOneAsync(DispatchDbContext db, string projectDir, string yamlPath, CancellationToken ct)

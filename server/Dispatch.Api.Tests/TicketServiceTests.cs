@@ -10,6 +10,8 @@ namespace Dispatch.Api.Tests;
 
 public sealed class TicketServiceTests : IAsyncLifetime
 {
+    private const string NL = "\n";
+
     private TestHost _host = null!;
 
     public Task InitializeAsync()
@@ -40,7 +42,7 @@ public sealed class TicketServiceTests : IAsyncLifetime
 
         Assert.Equal(RunKind.Refine, run.Kind);
         Assert.Equal(RunStatus.Pending, run.Status);
-        Assert.Equal($"REFINE {ticket.Id} Add login page", run.Prompt);
+        Assert.Equal($"SYNC /home/agent/demo{NL}{NL}REFINE {ticket.Id} Add login page", run.Prompt);
         Assert.Equal(TicketStatus.Refining, (await _host.ReloadAsync(ticket.Id)).Status);
     }
 
@@ -171,7 +173,7 @@ public sealed class TicketServiceTests : IAsyncLifetime
         Assert.Equal($"t-{ticket.Id}", reloaded.Container);
         Assert.NotNull(reloaded.Slug);
         Assert.Matches(@"^add-login-page-for-[a-z0-9]{3}$", reloaded.Slug);
-        Assert.Equal($"WORK {ticket.Id} {reloaded.Slug} /home/agent/demo", run.Prompt);
+        Assert.Equal($"SYNC /home/agent/demo{NL}{NL}WORK {ticket.Id} {reloaded.Slug} /home/agent/demo", run.Prompt);
 
         var calls = _host.Incus.Calls.ToList();
         Assert.Contains($"ensure t-{ticket.Id}", calls);
@@ -206,12 +208,30 @@ public sealed class TicketServiceTests : IAsyncLifetime
 
         Assert.Equal(RunKind.Work, run.Kind);
         // plan -> implement -> review -> fix in one session: the plan prompt is prepended to the regular work prompt.
-        Assert.Equal($"PLAN {ticket.Id} {reloaded.Slug}\n\nWORK {ticket.Id} {reloaded.Slug} /home/agent/demo", run.Prompt);
+        Assert.Equal(
+            $"SYNC /home/agent/demo{NL}{NL}PLAN {ticket.Id} {reloaded.Slug}{NL}{NL}WORK {ticket.Id} {reloaded.Slug} /home/agent/demo",
+            run.Prompt);
         Assert.Equal(TicketType.Task, reloaded.Type);
         Assert.Equal(TicketStatus.InProgress, reloaded.Status);
         Assert.StartsWith("# Bump node to 22\n", reloaded.Spec);
         Assert.Contains("Update .nvmrc and CI.", reloaded.Spec);
         Assert.Contains($"push t-{ticket.Id}/home/agent/demo/orchestrator/features/{ticket.Id}-{reloaded.Slug}.md", _host.Incus.Calls);
+    }
+
+    [Fact]
+    public async Task Fresh_answer_run_without_session_syncs_before_refining()
+    {
+        var ticket = await _host.CreateTicketAsync();
+        List<Question> questions;
+        using (var scope = _host.Scope())
+        {
+            questions = await _host.Tickets(scope).AddQuestionsAsync(ticket.Id, ["Which DB?"]);
+        }
+
+        using var scope2 = _host.Scope();
+        var run = await _host.Tickets(scope2).AnswerAsync(ticket.Id, [new AnswerItem(questions[0].Id, "Postgres")]);
+
+        Assert.StartsWith($"SYNC /home/agent/demo{NL}{NL}REFINE ", run.Prompt);
     }
 
     [Fact]
