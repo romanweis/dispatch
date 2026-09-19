@@ -5,7 +5,8 @@
 # ~/.docker/config.json itself) in every base and ticket container.
 #
 #   infra/registry-login.sh --ghcr                       # ghcr.io with the host's gh token
-#   infra/registry-login.sh --check --ghcr               # show what is stored and verify it
+#   infra/registry-login.sh --ghcr --image ghcr.io/<org>/<image>   # also check that pull works
+#   infra/registry-login.sh --check --ghcr [--image ...] # show what is stored and verify it
 #   SCW_SECRET_KEY=scwsk... infra/registry-login.sh --registry rg.fr-par.scw.cloud
 #   infra/registry-login.sh --registry <host> --user <u>  # prompts for the secret (no echo)
 #
@@ -32,20 +33,60 @@ USER_NAME="${REGISTRY_USER:-nologin}"
 CHECK_ONLY=0
 FORCE=0
 GHCR=0
+REPO=""          # <namespace>/<image> for the scoped pull check
+TAG=latest
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --ghcr)     GHCR=1; REGISTRY=ghcr.io; shift ;;
     --registry) REGISTRY="${2:?--registry needs a value}"; shift 2 ;;
     --user)     USER_NAME="${2:?--user needs a value}"; shift 2 ;;
+    --image)    IMAGE_REF="${2:?--image needs a value}"; shift 2 ;;
     --check)    CHECK_ONLY=1; shift ;;
     --force)    FORCE=1; shift ;;
-    -h|--help)  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)  sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)          die "unknown argument: $1" ;;
   esac
 done
 
 command -v jq >/dev/null 2>&1 || die "jq required (infra/setup-server.sh installs it)"
+
+# --image ghcr.io/org/name:tag (or org/name:tag) -> REGISTRY + REPO + TAG
+if [ -n "${IMAGE_REF:-}" ]; then
+  ref="$IMAGE_REF"
+  case "$ref" in
+    */*/*|*.*/*) REGISTRY="${ref%%/*}"; ref="${ref#*/}" ;;
+  esac
+  case "$ref" in *:*) TAG="${ref##*:}"; ref="${ref%:*}" ;; esac
+  REPO="$ref"
+fi
+
+# Verify a credential the way a docker pull does. A registry that answers /v2/ with a Bearer
+# challenge (GHCR, Docker Hub) rejects basic auth there outright, so the credential has to be
+# exchanged at the token service named in the challenge; only a registry without a challenge
+# is checked with basic auth directly. With a repo, the scoped token is used to fetch the
+# manifest, which is the real "can this pull" answer.
+# verify_cred <registry> <user> <secret> [namespace/image]
+verify_cred() {
+  local reg="$1" u="$2" p="$3" repo="${4:-}"
+  local hdr realm service url tok
+  hdr="$(curl -sS -m 20 -D - -o /dev/null "https://$reg/v2/" 2>/dev/null | tr -d '\r' \
+         | grep -i '^www-authenticate:' | head -1 || true)"
+  realm="$(printf '%s' "$hdr"  | sed -n 's/.*realm="\([^"]*\)".*/\1/p')"
+  service="$(printf '%s' "$hdr" | sed -n 's/.*service="\([^"]*\)".*/\1/p')"
+  if [ -z "$realm" ]; then
+    curl -fsS -m 20 -o /dev/null -u "$u:$p" "https://$reg/v2/"
+    return
+  fi
+  url="$realm?service=${service:-$reg}"
+  [ -n "$repo" ] && url="$url&scope=repository:$repo:pull"
+  tok="$(curl -fsS -m 20 -u "$u:$p" "$url" 2>/dev/null | jq -r '.token // .access_token // empty')" || return 1
+  [ -n "$tok" ] || return 1
+  [ -n "$repo" ] || return 0
+  curl -fsS -m 20 -o /dev/null -H "Authorization: Bearer $tok" \
+    -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json' \
+    "https://$reg/v2/$repo/manifests/$TAG"
+}
 
 # ---------------------------------------------------------------------------
 if [ "$CHECK_ONLY" -eq 1 ]; then
@@ -54,11 +95,12 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   jq -r '.auths // {} | to_entries[] | "    " + .key + "   user=" + ((.value.auth // "" | @base64d | split(":")[0]) // "?")' "$CONFIG"
   stored="$(jq -r --arg r "$REGISTRY" '.auths[$r].auth // ""' "$CONFIG")"
   [ -n "$stored" ] || die "no entry for $REGISTRY"
-  step "verify $REGISTRY"
-  if curl -fsS -o /dev/null -u "$(printf '%s' "$stored" | base64 -d)" "https://$REGISTRY/v2/"; then
-    ok "credential accepted by $REGISTRY"
+  step "verify $REGISTRY${REPO:+ (pull $REPO:$TAG)}"
+  decoded="$(printf '%s' "$stored" | base64 -d)"
+  if verify_cred "$REGISTRY" "${decoded%%:*}" "${decoded#*:}" "$REPO"; then
+    ok "credential accepted by $REGISTRY${REPO:+; $REPO:$TAG is pullable}"
   else
-    die "credential rejected by $REGISTRY (expired or revoked token?)"
+    die "credential rejected by $REGISTRY (expired or revoked token? no access to $REPO?)"
   fi
   exit 0
 fi
@@ -91,9 +133,9 @@ fi
 [ -n "$SECRET" ] || die "empty secret"
 ok "${#SECRET} characters"
 
-step "verify against https://$REGISTRY/v2/"
-if curl -fsS -o /dev/null -u "$USER_NAME:$SECRET" "https://$REGISTRY/v2/"; then
-  ok "accepted"
+step "verify against $REGISTRY${REPO:+ (pull $REPO:$TAG)}"
+if verify_cred "$REGISTRY" "$USER_NAME" "$SECRET" "$REPO"; then
+  ok "accepted${REPO:+; $REPO:$TAG is pullable}"
 elif [ "$FORCE" -eq 1 ]; then
   warn "registry rejected the credential; --force given, storing it anyway"
 else
