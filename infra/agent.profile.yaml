@@ -8,6 +8,12 @@
 #
 # (infra/setup-server.sh does exactly that, idempotently.)
 #
+# Registry credentials: /srv/dispatch/secrets/docker holds the config.json written by
+# infra/registry-login.sh (private images such as ghcr.io/<org>/<image>). It is
+# mounted, not copied, so refreshing a token fixes running ticket containers too. Both the
+# docker CLI and Testcontainers read ~/.docker/config.json, so pulls in the integration
+# suites are authenticated without any per-repo setup.
+#
 # Claude credentials: the host user's LIVE ~/.claude is mounted, not a copy. Claude
 # rotates the OAuth refresh token on every refresh, so a copied .credentials.json dies
 # as soon as the host (or another copy) refreshes first ("OAuth session expired and
@@ -60,3 +66,7 @@ devices:
     type: disk
     source: /srv/dispatch/secrets/gh
     path: /home/agent/.config/gh
+  docker-secrets:
+    type: disk
+    source: /srv/dispatch/secrets/docker
+    path: /home/agent/.docker

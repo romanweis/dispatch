@@ -89,6 +89,13 @@ as_root -- systemctl is-system-running --wait >/dev/null 2>&1 || true
 # Make sure the host's shared dirs landed with the right ownership for uid 1000.
 as_agent -- test -w /home/agent/.claude || die "/home/agent/.claude not writable by uid 1000; check shift on $PROFILE and /srv/dispatch/secrets ownership"
 as_agent -- test -r /home/agent/.config/gh/hosts.yml || warn "/home/agent/.config/gh/hosts.yml not readable; gh in containers will rely on GH_TOKEN"
+# Private images (Testcontainers pulling e.g. ghcr.io/<org>/<image>) need the shared
+# docker login; the mount is live, so a fix does not require rebuilding this base.
+if as_agent -- test -r /home/agent/.docker/config.json; then
+  ok "registry logins: $(as_agent -- bash -c 'jq -r "(.auths // {}) | keys | join(\", \")" /home/agent/.docker/config.json 2>/dev/null' || echo unreadable)"
+else
+  warn "/home/agent/.docker/config.json missing; pulls of private images will fail. Run $INFRA_DIR/registry-login.sh (no rebuild needed afterwards)"
+fi
 
 # ---------------------------------------------------------------------------
 step "environment from project.yaml .env"

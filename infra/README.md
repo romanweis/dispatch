@@ -7,8 +7,9 @@ Everything here runs **on the Linux server** (Ubuntu 24.04, user `roman`, repo c
 | `setup-server.sh` | One-time host setup: apt packages, Incus (ZFS loop pool + `incusbr0`), profile, secrets dirs, PostgreSQL, .NET 10 SDK, Node 22 + pnpm, ufw, user systemd unit |
 | `build-agent-base.sh` | Builds the Incus image alias `agent-base` (Ubuntu 24.04 + user `agent` uid 1000 + Node 22 + Claude Code + gh + Docker CE) |
 | `build-project-base.sh <project>` | Builds the stopped container `<project>-base` from `agent-base` + `projects/<project>/project.yaml` (repos cloned, orchestrator repo created/rendered, provision scripts run) |
+| `registry-login.sh` | Stores a private container-registry login (`--ghcr` uses the host gh token) in `/srv/dispatch/secrets/docker/config.json`, which every container sees at `~/.docker/config.json` |
 | `deploy.sh` | `dotnet publish` the API, `pnpm build` the UI, swap into `~/.local/opt/dispatch`, restart the service, check `/healthz` |
-| `agent.profile.yaml` | Incus profile `dispatch-agent` (nesting, limits, shifted bind mounts for Claude + gh credentials) |
+| `agent.profile.yaml` | Incus profile `dispatch-agent` (nesting, limits, shifted bind mounts for Claude + gh + registry credentials) |
 | `dispatch.service` | systemd **user** unit for the API (`systemctl --user ... dispatch`) |
 
 ## Prerequisites
@@ -16,6 +17,7 @@ Everything here runs **on the Linux server** (Ubuntu 24.04, user `roman`, repo c
 - Tailscale up on the server (`tailscale status`); the UI is reached over `tailscale0` on port 9300.
 - `gh auth login` done as roman (HTTPS; needs `repo` + `workflow` scopes, and access to the GitHub orgs named in `projects/*/project.yaml`). `setup-server.sh` copies `~/.config/gh/{hosts.yml,config.yml}` into the shared secrets dir and `build-project-base.sh` uses `gh auth token` for cloning and for creating orchestrator repos.
 - Claude Code logged in on the host (`~/.claude/.credentials.json`, `~/.claude.json` exist).
+- A pull credential for every private registry an integration suite touches: `infra/registry-login.sh --ghcr` stores the host gh token for `ghcr.io` (needs `gh auth refresh -s read:packages` once), `--registry <host>` covers anything else. Stored once, used by every container; nothing in the project repos needs to know about it.
 - Password sudo for roman. Scripts never assume passwordless sudo; run them in an interactive terminal.
 
 ## Order of operations
@@ -25,9 +27,10 @@ cd ~/dispatch
 infra/setup-server.sh                 # 1. host setup; prompts for sudo
 # log out / log in (activates incus-admin for new shells AND for the user systemd manager)
 gh auth login && infra/setup-server.sh   # only if gh was not logged in the first time
-infra/build-agent-base.sh             # 2. image alias agent-base (10-15 min, downloads a lot)
-infra/build-project-base.sh bognerchess   # 3. once per projects/<name>/
-infra/deploy.sh                       # 4. build + start the API/UI
+infra/registry-login.sh --ghcr        # 2. private-registry login (any time, no rebuild)
+infra/build-agent-base.sh             # 3. image alias agent-base (10-15 min, downloads a lot)
+infra/build-project-base.sh bognerchess   # 4. once per projects/<name>/
+infra/deploy.sh                       # 5. build + start the API/UI
 ```
 
 Then open `http://<server-tailscale-ip>:9300/`.
@@ -40,6 +43,7 @@ Then open `http://<server-tailscale-ip>:9300/`.
 - `/srv/dispatch/secrets/claude/` — mounted at `/home/agent/.claude` in every agent container (credentials **and** Claude's session state, shared by all containers).
 - `/srv/dispatch/secrets/claude-json/.claude.json` — pushed to `/home/agent/.claude.json` by `build-project-base.sh`.
 - `/srv/dispatch/secrets/gh/` — mounted at `/home/agent/.config/gh`.
+- `/srv/dispatch/secrets/docker/config.json` — mounted at `/home/agent/.docker` in every agent container. Written by `infra/registry-login.sh` (or copied from the host's `~/.docker/config.json` if one already has auths). Both the docker CLI and Testcontainers read it, so integration suites that pull private images (e.g. `ghcr.io/bognerchess/email_renderer`, private like every GHCR package by default) work inside ticket containers without per-repo setup. The mount is live: refreshing a rotated token fixes **running** containers too, no rebuild.
 - Pool size: `INCUS_POOL_SIZE=600GiB infra/setup-server.sh` (default 400GiB; only used on first init).
 
 ## Rebuilding
@@ -78,6 +82,7 @@ Ad-hoc test container from a base: `incus copy bognerchess-base t-test && incus 
 - **Docker inside a container fails to start** — needs `security.nesting=true` plus the two `security.syscalls.intercept.*` keys; both come from the `dispatch-agent` profile (`incus config show t-12 --expanded | grep security`). Overlay2 on the ZFS-backed rootfs requires OpenZFS >= 2.2 (24.04 has 2.2.x); the image builder falls back to `fuse-overlayfs` in `/etc/docker/daemon.json` when the default driver will not start. Check with `incus exec t-12 -- docker info --format '{{.Driver}}'`.
 - **`/home/agent/.claude` shows `nobody` ownership in a container** — `shift: "true"` on the profile disk devices did not take effect. Requires idmapped-mount support (kernel >= 5.12, ext4/xfs source, which the target has) and that `/srv/dispatch/secrets/*` is owned by uid 1000 on the host. Verify with `incus exec t-12 -- stat -c '%U' /home/agent/.claude`.
 - **Claude in a container asks to log in / onboard** — `/srv/dispatch/secrets/claude/.credentials.json` missing or expired: log in with `claude` on the host and re-run `infra/setup-server.sh` (copies with `cp -u`, so a newer file written by a container is kept). `~/.claude.json` in the container comes from `/srv/dispatch/secrets/claude-json/`.
+- **A container cannot pull a private image** (`pull access denied`, `denied`, `unauthorized`, Testcontainers failing on a `ghcr.io/...` image) — the shared login is missing or the token was rotated. `infra/registry-login.sh --check --ghcr` verifies what is stored against the registry; re-run `infra/registry-login.sh` to replace it. No rebuild: the mount is live, so running ticket containers pick the new token up on the next pull. Inside the container, confirm with `incus exec t-12 --user 1000 --group 1000 --env HOME=/home/agent -- cat /home/agent/.docker/config.json`. If that path does not exist at all, the profile predates the `docker-secrets` device — re-run `infra/setup-server.sh` (it applies `agent.profile.yaml`) and restart the container.
 - **`gh` in a container is not authenticated** — `gh auth status` on the host, then re-run `setup-server.sh`; the token in `hosts.yml` is shared with all containers via the bind mount.
 - **Containers cannot reach the API** — `DISPATCH_URL` uses the `incusbr0` gateway address (`incus network get incusbr0 ipv4.address`). If ufw is active, `setup-server.sh` added an allow rule for port 9300 on `incusbr0`; check `sudo ufw status`.
 - **`dispatch` service will not start** — `journalctl --user -u dispatch -n 100`. Common causes: `.env` DB password out of sync (re-run `setup-server.sh`, it re-applies the password from `.env` to the role), `~/.dotnet` missing (`DOTNET_ROOT`), or the incus-admin group not yet visible to the user manager (see above).

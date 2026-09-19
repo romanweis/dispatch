@@ -158,7 +158,7 @@ fi
 # ---------------------------------------------------------------------------
 step "secrets in $SECRETS"
 sudo install -d -m 0755 -o "$ME" -g "$ME" "$SRV"
-install -d -m 0700 "$SECRETS" "$SECRETS/claude" "$SECRETS/gh" "$SECRETS/claude-json"
+install -d -m 0700 "$SECRETS" "$SECRETS/claude" "$SECRETS/gh" "$SECRETS/claude-json" "$SECRETS/docker"
 
 # cp -u: only refresh when the host copy is newer, so a token refreshed by a
 # container (which writes into the bind-mounted dir) is not clobbered.
@@ -190,6 +190,24 @@ if gh auth status >/dev/null 2>&1; then
   ok "gh/hosts.yml + config.yml"
 else
   warn "gh is not logged in. Run:  gh auth login   (HTTPS, scopes incl. repo, workflow) and re-run this script"
+fi
+
+# $SECRETS/docker is mounted at /home/agent/.docker by the profile, so every container
+# inherits the registry logins stored there (private images pulled by Testcontainers, e.g.
+# ghcr.io packages, private by default). Written by infra/registry-login.sh, or seeded here from
+# the host's own docker login when there is one. The directory has to exist before a
+# container starts or incus refuses the mount.
+registry_ok=0
+if [ -f "$SECRETS/docker/config.json" ]; then
+  registry_ok=1
+  ok "docker/config.json ($(jq -r '.auths // {} | keys | join(", ")' "$SECRETS/docker/config.json" 2>/dev/null || echo unreadable))"
+elif [ -f "$HOME/.docker/config.json" ] && jq -e '(.auths // {}) | length > 0' "$HOME/.docker/config.json" >/dev/null 2>&1; then
+  cp -u "$HOME/.docker/config.json" "$SECRETS/docker/config.json"
+  chmod 600 "$SECRETS/docker/config.json"
+  registry_ok=1
+  ok "docker/config.json copied from ~/.docker"
+else
+  warn "no private-registry login yet; pulls of private images in containers will fail. Run: $INFRA_DIR/registry-login.sh"
 fi
 
 # ---------------------------------------------------------------------------
@@ -349,7 +367,7 @@ cat <<EOF
 Setup complete.
 
   env file:        $ENV_FILE
-  secrets:         $SECRETS/{claude,gh,claude-json}
+  secrets:         $SECRETS/{claude,gh,claude-json,docker}
   incus:           pool default (zfs, /var/lib/incus/disks/default.img), bridge $BRIDGE, profile $PROFILE_NAME
   postgres:        dispatch@127.0.0.1:5432/dispatch
   service:         systemctl --user {start,status,restart} dispatch
@@ -363,8 +381,13 @@ if [ "$gh_ok" -eq 0 ]; then
 else
   printf '  2. (gh credentials copied)\n'
 fi
+if [ "$registry_ok" -eq 0 ]; then
+  printf '  3. %s/registry-login.sh   # private-registry login for the containers\n' "$INFRA_DIR"
+else
+  printf '  3. (registry login in place)\n'
+fi
 cat <<EOF
-  3. $INFRA_DIR/build-agent-base.sh              # Incus image 'agent-base'
-  4. $INFRA_DIR/build-project-base.sh <project>  # for each projects/<project>/project.yaml
-  5. $INFRA_DIR/deploy.sh                        # build API + UI, start the service
+  4. $INFRA_DIR/build-agent-base.sh              # Incus image 'agent-base'
+  5. $INFRA_DIR/build-project-base.sh <project>  # for each projects/<project>/project.yaml
+  6. $INFRA_DIR/deploy.sh                        # build API + UI, start the service
 EOF
